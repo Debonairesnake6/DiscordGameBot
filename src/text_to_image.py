@@ -31,6 +31,8 @@ class CreateImage:
         self.convert_columns = convert_columns
         self.title_colours = title_colours
         self.column_width = column_width
+        self.columns_processed = 0
+        self.table_string = None
 
         # Setup and add rows to the table
         self.table = prettytable.PrettyTable()
@@ -56,20 +58,31 @@ class CreateImage:
         for row in self.rows:
             self.table.add_row(row)
 
+        self.table_string = self.table.get_string()
+
     def convert_to_multiple_tables(self):
         """
         Convert to multiple tables to have more verticality
         """
+        for width in range((len(self.titles) / self.column_width).__round__()):
+            table = prettytable.PrettyTable()
+            table.field_names = self.titles[self.columns_processed:self.columns_processed + self.column_width]
+            [table.add_row(row[self.columns_processed:self.columns_processed + self.column_width]) for row in self.rows]
+            print(table.get_string())
+            self.columns_processed += self.column_width
+            # Todo continue to fix this section
+
+        print()
 
     def turn_into_image(self):
         """
         Turn the table into an image
         """
         if self.title_colours:
-            self.table_to_image = TableToImage(self.table.get_string(), self.colour, self.rows, self.titles,
+            self.table_to_image = TableToImage(self.table_string, self.colour, self.rows, self.titles,
                                                self.title_colours)
         else:
-            self.table_to_image = TableToImage(self.table.get_string(), self.colour, self.rows)
+            self.table_to_image = TableToImage(self.table_string, self.colour, self.rows)
 
     def save_image(self):
         """

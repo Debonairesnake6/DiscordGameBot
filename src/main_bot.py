@@ -86,7 +86,8 @@ class DiscordBot:
         ignored_columns = ['UID', 'Name', 'isBusy']
         text_to_image.CreateImage(titles=[title for title in self.user_info.keys() if title not in ignored_columns],
                                   rows=[[str(value) for title, value in self.user_info.items() if title not in ignored_columns]],
-                                  file_name='../extra_files/user_info.jpg')
+                                  file_name='../extra_files/user_info.jpg',
+                                  column_width=4)
 
     def get_user_info(self):
         """

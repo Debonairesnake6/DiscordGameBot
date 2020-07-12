@@ -1,0 +1,29 @@
+Combat:
+    Basic Combat Functions:
+        Attack
+        Defend
+        Spell List
+            1.
+            2.
+            3. etc.
+        Flee From Combat
+
+DB Tables:
+
+User Info Table :
+    UID*, Name, Money, LVL, EXP, HP, MP, STAM, ATK, DEF, EqpdItem
+
+Battle Table :
+    UID*, playerHP, playerMP, playerSTAM, playerATK, playerDEF, playerEqpdItem, enemyHP, enemyMP, enemySTAM, enemyATK, enemyDEF
+
+Spell Table:
+    UID*, KnownSpell1, KnownSpell2, etc.
+
+Inventory Table:
+    UID*, Object 1, Object 2, etc.
+
+
+
+Encounters:
+    1 - Enter combat with a randomized monster adjusted to your level. If you win, you get EXP and loot.
+    2 -

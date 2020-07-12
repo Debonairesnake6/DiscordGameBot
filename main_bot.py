@@ -7,6 +7,7 @@ import json
 import urllib
 import time
 import sys
+import sqlite3
 
 from discord import File
 from discord import Activity
@@ -18,16 +19,12 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+connection = sqlite3.connect("serverDatabase.db")
+cursor = connection.cursor()
 
 class DiscordBot:
-    """
-    Social Credit Discord bot
-    """
 
     def __init__(self):
-        """
-        Social Credit Discord bot
-        """
         self.user = None
         self.display_name = None
         self.message = None
@@ -40,57 +37,13 @@ class DiscordBot:
         """
         Display the help message for the bot
         """
-        await self.message.channel.send('Social Credit commands:```'
-                                        'Whenever I have multiple commands like ussr/USSR that means any of the listed '
-                                        'ones work. Anything in square brackets [] is optional, curly braces {} are '
-                                        'required but have an obvious substitute for the word. All commands start '
-                                        'with !'
-                                        ''
-                                        '\n\n!ussr/USSR'
-                                        '\n\t-\tBasic commands to use the bot. This will display your current balance.'
-                                        '\n\t-\tAll of the following commands work with all of these options, but I '
-                                        'will just show using USSR as it is redundant to list all of them.'
-                                        ''
-                                        '\n\n!USSR add {amount} [@Citizen]'
-                                        '\n\t-\tAdd social credits to your account. Replace {amount} with the value you'
-                                        ' want to add.'
-                                        '\n\t-\tIf you ping a user or group at the end of the message it will '
-                                        'add credits to their account instead.'
-                                        '\n\t-\te.g. !USSR add 12345'
-                                        '\n\t-\te.g. !USSR add 54321 @Debonairesnake6'
-                                        '\n\t-\te.g. !USSR add 123 @TheSquad'
-                                        ''
-                                        '\n\n!USSR remove {amount} [@Citizen]'
-                                        '\n\t-\tRemove social credits from your account. Replace {amount} with the '
-                                        'value you want to remove.'
-                                        '\n\t-\tIf you ping a user or group at the end of the '
-                                        'message it will remove credits from their account instead.'
-                                        '\n\t-\te.g. !USSR remove 12345'
-                                        '\n\t-\te.g. !USSR remove 54321 @Debonairesnake6'
-                                        '\n\t-\te.g. !USSR remove 123 @TheSquad'
-                                        ''
-                                        '\n\n!USSR set {amount} [@Citizen]'
-                                        '\n\t-\tSet the amount of social credits in your account. Replace {amount} '
-                                        'with the value you want to set it to.'
-                                        '\n\t-\tIf you ping a user or group at the end '
-                                        'of the message it will set their credits to that amount instead.'
-                                        '\n\t-\te.g. !USSR set 12345'
-                                        '\n\t-\te.g. !USSR set 54321 @Debonairesnake6'
-                                        '\n\t-\te.g. !USSR set 123 @TheSquad'
-                                        ''
-                                        '\n\n!USSR leaderboard'
-                                        '\n\t-\tDisplay the leaderboard for each citizen\'s bank account.'
-                                        '\n\t-\te.g. !USSR leaderboard'
-                                        ''
-                                        '\n\n!USSR help'
-                                        '\n\t-\tShow this help message.```')
+        await self.message.channel.send('``')
 
     async def unknown_command(self):
         """
         Tell the user the given command is unknown
         """
-        await self.message.channel.send(f'Unknown command: {self.message.content.split()[1]}. Use the following command'
-                                        f' for help.\n!ussr help')
+        await self.message.channel.send(f'Unknown command')
 
     async def handle_happy_birthday_message(self):
         """
@@ -101,6 +54,22 @@ class DiscordBot:
         for letter in birthday_message:
             await self.message.channel.send(f'{letter} {self.message.content.split()[1]}')
             time.sleep(1)
+
+    async def register_me(self):
+
+        cursor.execute(f"""SELECT UID FROM UserInfo WHERE UID={self.message.author.id}  ;""")
+
+        if (cursor.fetchone() != None):
+            await self.message.channel.send('You\'re already registered.')
+            return
+        else:
+            cursor.execute(
+                f"""INSERT INTO UserInfo (UID, DisplayName, Rating, Challenging, inBattle, HP, ATK, SPD, Action1, Action2, Action3, Action4)
+                                   VALUES ('{self.message.author.id}', '{self.message.author.name}', 100, 'None', 0, 10,3,5,'Attack','Heavy Attack','Defend','Dodge');""")
+            connection.commit()
+            await self.message.channel.send(f'You\'ve been registered with name: {self.message.author.name} ')
+
+        return
 
     @staticmethod
     async def message_user(user: object, message: str):
@@ -117,7 +86,7 @@ class DiscordBot:
         Start the bot
         """
         valid_commands = {
-            'birthday': self.handle_happy_birthday_message
+            'registerMe': self.register_me
         }
 
         @self.bot.event

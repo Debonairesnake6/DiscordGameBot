@@ -11,7 +11,7 @@ Combat:
 DB Tables:
 
 User Info Table :
-    UID*, Name, Money, LVL, EXP, HP, MP, STAM, ATK, DEF, EqpdItem
+    UID*, Name, Money, LVL, EXP, HP, MP, STAM, ATK, DEF, SPD, EqpdItem, Location
 
 Battle Table :
     UID*, playerHP, playerMP, playerSTAM, playerATK, playerDEF, playerEqpdItem, enemyHP, enemyMP, enemySTAM, enemyATK, enemyDEF

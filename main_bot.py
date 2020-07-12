@@ -1,7 +1,3 @@
-"""
-This is the brain of the bot which parses input and manages the discord server
-"""
-
 import os
 import json
 import urllib
@@ -45,16 +41,6 @@ class DiscordBot:
         """
         await self.message.channel.send(f'Unknown command')
 
-    async def handle_happy_birthday_message(self):
-        """
-        Handle the incoming happy birthday message
-        """
-
-        birthday_message = 'Happy Birthday'
-        for letter in birthday_message:
-            await self.message.channel.send(f'{letter} {self.message.content.split()[1]}')
-            time.sleep(1)
-
     async def register_me(self):
 
         cursor.execute(f"""SELECT UID FROM UserInfo WHERE UID={self.message.author.id}  ;""")
@@ -64,8 +50,8 @@ class DiscordBot:
             return
         else:
             cursor.execute(
-                f"""INSERT INTO UserInfo (UID, Name, isBusy, Money, LVL, EXP, HP, MP, STAM, ATK, DEF, SPD, EqpdItem, Location)
-                                   VALUES ('{self.message.author.id}', '{self.message.author.name}', 0, 0, 1, 0, 100, 10, 10, 10, 10, 10, 'None', 'Home');""")
+                f"""INSERT INTO UserInfo (UID, Name, isBusy, Money, LVL, EXP, HP, STAM, ATK, DEF, SPD, EqpdItem, Location)
+                                   VALUES ('{self.message.author.id}', '{self.message.author.name}', 0, 0, 1, 0, 100, 10, 10, 10, 10, 'None', 'Home');""")
             connection.commit()
             await self.message.channel.send(f'You\'ve been registered with name: {self.message.author.name} ')
 
@@ -116,7 +102,6 @@ class DiscordBot:
 
         # Run the bot
         self.bot.run(os.getenv('DISCORD_TOKEN'))
-
 
 if __name__ == '__main__':
 

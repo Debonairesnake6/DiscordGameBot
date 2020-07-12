@@ -1,20 +1,23 @@
-Combat:
+Combat ---------------------------------------------------------------------------------------------------------------
+    > At round start, each player gains 1 STAM.
     Basic Combat Functions:
-        Attack
-        Defend
+        Attack - 1 STAM COST - Inflict (ATK) damage on enemy.
+        Defend - 0 STAM COST - Decrease any incoming damage by (1/2 ATK)
+        Dodge - 0 STAM COST - Attempt to dodge incoming damage w/ the following chance: (25% + (5*SPD)%)
+        Use Item - 1 STAM COST - Use a consumable item from your inventory.
         Spell List
             1.
             2.
             3. etc.
-        Flee From Combat
+        Flee From Combat - 1 STAM COST - Attempt to exit the fight.
 
-DB Tables:
+DB Tables -------------------------------------------------------------------------------------------------------------
 
 User Info Table :
-    UID*, Name, isBusy, Money, LVL, EXP, HP, MP, STAM, ATK, DEF, SPD, EqpdItem, Location
+    UID*, Name, isBusy, Money, LVL, EXP, HP, STAM, ATK, DEF, SPD, EqpdItem, Location
 
 Battle Table :
-    UID*, playerHP, playerMP, playerSTAM, playerATK, playerDEF, playerEqpdItem, enemyHP, enemyMP, enemySTAM, enemyATK, enemyDEF
+    UID*, pHP, pSTAM, pATK, pDEF, pSPD, pEqpdItem, eHP, eSTAM, eATK, eDEF, eSPD
 
 Encounter Table :
 
@@ -24,8 +27,70 @@ Spell Table:
 Inventory Table:
     UID*, Object 1, Object 2, etc.
 
+Encounters ------------------------------------------------------------------------------------------------------------{
 
+    1 - Fight - Enter combat with a randomized monster adjusted to your level. If you win, you get EXP and loot.
 
-Encounters:
-    1 - Enter combat with a randomized monster adjusted to your level. If you win, you get EXP and loot.
-    2 -
+    2 - Strange Traveler -
+        You are approached by a cloaked traveler who asks you for x (randomized value) money.
+            Options:
+                - Give the traveler the gold.
+                    Randomized Possibilities:
+                    > You give the traveler the money, they thank you and leave.
+                    > You give the traveler the money, they thank you by giving you a small (randomized) item.
+                - Refuse to give the traveler the money.
+                    Randomized Possibilities:
+                    > You refuse and the traveler calls you a cheap bastard, and walks off.
+                    > The traveler gets hostile and becomes visibly aggressive with you, giving you the following options:
+                        - Agree to give the traveler the money.
+                            > The traveler takes your money and leaves.
+                        - Continue to refuse.
+                            > The traveler becomes agitated and begins a fight with you.
+
+    3 -  Strange Crate -
+        As you travel, you come across a (small/medium/large), unmarked crate.
+            Options:
+                - Ignore the crate.
+                - Attempt to open the crate.
+                    Randomized Possibilities:
+                    > The crate contains a (random) item.
+                    > The crate is booby-trapped and explodes, causing you damage.
+                    > The crate contained a creature, and they fight you.
+
+    4 - Wounded Traveler -
+        As you travel, you come across a wounded traveler, laying on the ground. They are covered in blood and their clothes are tattered.
+            Options:
+                - Ignore the traveler.
+                - Approach the traveler.
+                    Randomized Possibilities:
+                    > The traveler is genuinely wounded and will die without intervention.
+                        Options:
+                            - (AVAILABLE IF PLAYER HAS HEAL SPELL OR HEALING ITEMS) Heal the traveler.
+                                > You help the traveler and they thank you by giving you an item or money.
+                            - Attempt to heal the traveler as best as you can with the equipment you have.
+                                Randomized Possibilities:
+                                > By chance you manage to help the traveler, and they thank you by giving you an item or money.
+                                > You fail to help them, and they die. You may loot their body.
+                            - Put the traveler out of their misery.
+                                > They die and you may loot their body.
+                    > It's a trap and the traveler turns on you, attacking you with a surprise attack to start the round.
+
+    5 - Patrolling Official
+        You are approached by an official of a nearby city. They state they are looking for those smuggling contraband, and ask to look through your wares.
+        Options:
+            - Allow the official to examine your goods.
+            - Refuse.
+}
+
+Spells ----------------------------------------------------------------------------------------------------------------
+
+Heal - 2 STAM COST - Heal HP by (ATK).
+
+Items -----------------------------------------------------------------------------------------------------------------
+
+Equipable:
+Dagger - +1 ATK
+Sword - +3 ATK
+
+Consumable:
+HP Potion - Heal 5 HP.

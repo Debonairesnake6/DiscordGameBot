@@ -64,8 +64,8 @@ class DiscordBot:
             return
         else:
             cursor.execute(
-                f"""INSERT INTO UserInfo (UID, DisplayName, Rating, Challenging, inBattle, HP, ATK, SPD, Action1, Action2, Action3, Action4)
-                                   VALUES ('{self.message.author.id}', '{self.message.author.name}', 100, 'None', 0, 10,3,5,'Attack','Heavy Attack','Defend','Dodge');""")
+                f"""INSERT INTO UserInfo (UID, Name, isBusy, Money, LVL, EXP, HP, MP, STAM, ATK, DEF, SPD, EqpdItem, Location)
+                                   VALUES ('{self.message.author.id}', '{self.message.author.name}', 0, 0, 1, 0, 100, 10, 10, 10, 10, 10, 'None', 'Home');""")
             connection.commit()
             await self.message.channel.send(f'You\'ve been registered with name: {self.message.author.name} ')
 

@@ -11,10 +11,12 @@ Combat:
 DB Tables:
 
 User Info Table :
-    UID*, Name, Money, LVL, EXP, HP, MP, STAM, ATK, DEF, SPD, EqpdItem, Location
+    UID*, Name, isBusy, Money, LVL, EXP, HP, MP, STAM, ATK, DEF, SPD, EqpdItem, Location
 
 Battle Table :
     UID*, playerHP, playerMP, playerSTAM, playerATK, playerDEF, playerEqpdItem, enemyHP, enemyMP, enemySTAM, enemyATK, enemyDEF
+
+Encounter Table :
 
 Spell Table:
     UID*, KnownSpell1, KnownSpell2, etc.

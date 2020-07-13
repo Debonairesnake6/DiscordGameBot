@@ -43,8 +43,6 @@ class DiscordBot:
             reader = csv.reader(csv_to_map, delimiter=',')
             self.world_map= list(reader)
 
-        for row in self.world_map: print(row)
-
         # Start listening to chat
         self.bot = commands.Bot(command_prefix='!')
         self.start_bot()
@@ -86,6 +84,41 @@ class DiscordBot:
         with self.file_lock:
             self.create_user_info_table()
             await self.message.channel.send('', file=File('../extra_files/user_info.jpg', filename='user_info.jpg'))
+
+    # Travel Function to allow map traversal.
+    async def travel(self):
+
+        # Gather the location info and format it into local variables.
+        self.cursor.execute(f"""SELECT Location FROM UserInfo WHERE UID={self.message.author.id}""")
+        unformatted_location = self.cursor.fetchone()
+        self.currentLocation = ''.join(unformatted_location).split("-")
+        for i in range(0, len(self.currentLocation)): self.currentLocation[i] = int(self.currentLocation[i])
+
+        # Adjust location by command.
+        if self.first_argument == 'north':
+            self.newLocation = [(self.currentLocation[0] - 1), self.currentLocation[1]]
+        elif self.first_argument == 'south':
+            self.newLocation = [(self.currentLocation[0] + 1), self.currentLocation[1]]
+        elif self.first_argument == 'east':
+            self.newLocation = [self.currentLocation[0], (self.currentLocation[1] - 1)]
+        elif self.first_argument == 'west':
+            self.newLocation = [self.currentLocation[0], (self.currentLocation[1] + 1)]
+
+        # Verify that the movement is within the bounds of the map.
+        if (self.newLocation[0] > len(self.world_map)) or (self.newLocation[0] < 0) or (self.newLocation[1] > len(self.world_map[0])) or (self.newLocation[1] < 0):
+            await self.message.channel.send('Invalid movement!')
+            return
+
+        # Format new location info to publish to SQL database.
+        toPublish = str(self.newLocation[0]) + "-" + str(self.newLocation[1])
+
+        # Commit new location to database.
+        self.cursor.execute(f"""UPDATE UserInfo SET Location = '{toPublish}' WHERE UID = {self.message.author.id}""")
+        self.connection.commit()
+
+        await self.message.channel.send(f'Your location contains: {self.world_map[self.newLocation[0]][self.newLocation[1]]}')
+
+        return
 
     def create_encounter(self):
         self.cursor.execute(
@@ -129,7 +162,8 @@ class DiscordBot:
         """
         valid_commands = {
             'registerMe': self.register_me,
-            'start_encounter': self.start_encounter
+            'start_encounter': self.start_encounter,
+            'travel' : self.travel
         }
 
         @self.bot.event
@@ -145,6 +179,7 @@ class DiscordBot:
                 self.user = message.author.name
                 self.display_name = message.author.display_name
                 self.message = message
+                self.first_argument = message.content.split()[1]
                 await valid_commands[message.content.split()[0][1:]]()
 
         @self.bot.event

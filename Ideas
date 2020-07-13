@@ -2,7 +2,7 @@ Combat -------------------------------------------------------------------------
     > At round start, each player gains 1 STAM.
     Basic Combat Functions:
         Attack - 1 STAM COST - Inflict (ATK) damage on enemy.
-        Defend - 0 STAM COST - Decrease any incoming damage by (1/2 ATK)
+        Defend - 0 STAM COST - Decrease any incoming damage by (DEF)
         Dodge - 0 STAM COST - Attempt to dodge incoming damage w/ the following chance: (25% + (5*SPD)%)
         Use Item - 1 STAM COST - Use a consumable item from your inventory.
         Spell List
@@ -14,12 +14,13 @@ Combat -------------------------------------------------------------------------
 DB Tables -------------------------------------------------------------------------------------------------------------
 
 User Info Table :
-    UID*, Name, isBusy, Money, LVL, EXP, HP, STAM, ATK, DEF, SPD, EqpdItem, Location
+    UID*, Name, isBusy, Money, LVL, EXP, HP, ATK, DEF, SPD, EqpdItem, Location
 
 Battle Table :
     UID*, pHP, pSTAM, pATK, pDEF, pSPD, pEqpdItem, eHP, eSTAM, eATK, eDEF, eSPD
 
-Encounter Table :
+Monster Table :
+    Name, HP, STAM, ATK, DEF, SPD, ACTION1, ACTION2, ACTION3, ACTION4, ACTION5
 
 Spell Table:
     UID*, KnownSpell1, KnownSpell2, etc.
@@ -58,7 +59,8 @@ Encounters ---------------------------------------------------------------------
                     > The crate contained a creature, and they fight you.
 
     4 - Wounded Traveler -
-        As you travel, you come across a wounded traveler, laying on the ground. They are covered in blood and their clothes are tattered.
+        As you travel, you come across a wounded traveler, laying on the ground. They are covered in blood and their clothes
+            are tattered.
             Options:
                 - Ignore the traveler.
                 - Approach the traveler.
@@ -76,21 +78,70 @@ Encounters ---------------------------------------------------------------------
                     > It's a trap and the traveler turns on you, attacking you with a surprise attack to start the round.
 
     5 - Patrolling Official
-        You are approached by an official of a nearby city. They state they are looking for those smuggling contraband, and ask to look through your wares.
+        You are approached by an official of a nearby city. They state they are looking for those smuggling contraband,
+            and ask to look through your wares.
         Options:
             - Allow the official to examine your goods.
+                > (IF PLAYER HAS CONTRABAND OBJECTS) The official finds a contraband and immediately points it out,
+                    stating that they must confiscate the goods.
+                    Options:
+                       - You hand over the contraband goods.
+                       - You refuse to hand over the goods. A fight ensues.
+                > (IF PLAYER HAS NO CONTRABAND OBJECTS) The official thanks you for your time and leaves.
+                > The "official" is actually a thief, who immediately pockets one of your items and attempts to run off.
+                    Options:
+                        - Stop the thief. A fight ensues.
+                        - Let the thief escape.
             - Refuse.
+                Randomized Possibilities:
+                    > The official finds your response suspicious, and asks again to examine your goods, or
+                        consequences will ensue.
+                        Options:
+                            - Allow them to examine your goods (direct to the situation above where they examine your wares)
+                            - Refuse. A fight ensues.
+                    > The official respects your privacy and leaves.
 }
 
 Spells ----------------------------------------------------------------------------------------------------------------
 
 Heal - 2 STAM COST - Heal HP by (ATK).
+Quicken - 1 STAM COST - Increase SPD by 50% of base SPD.
 
 Items -----------------------------------------------------------------------------------------------------------------
 
 Equipable:
 Dagger - +1 ATK
 Sword - +3 ATK
+Helmet - +3 maxHP
+Shield - +2 DEF
 
 Consumable:
 HP Potion - Heal 5 HP.
+
+Other Items:
+Drugs - Valuable - Contraband; illegal in many cities.
+
+Monsters --------------------------------------------------------------------------------------------------------------
+
+Goblin - | 10 HP | 3 ATK | 1 DEF | 5 SPD
+ACTION1 - Attack
+ACTION2 - Dodge
+ACTION3  ACTION4, ACTION5
+
+World Map -------------------------------------------------------------------------------------------------------------
+
+  1 2 3 4 5 6 7 8 9
+1 O O O O O O O O O
+2 O O O O O O O O O
+3 O O H O O O O O O
+4 O O O O O O O O O
+5 O O O O O O O O O
+6 O O O O T O O O O
+7 O O O O O W W W O
+8 O O O O W W W W O
+9 O O O O O W W O O
+
+O - "Blank Space"
+W - "Water" - NON-TRAVERSABLE
+H - "Home" City
+T - "Toronto" City

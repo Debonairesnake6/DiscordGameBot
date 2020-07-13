@@ -4,6 +4,7 @@ import urllib
 import time
 import sys
 import sqlite3
+import csv
 
 from discord import File
 from discord import Activity
@@ -36,6 +37,13 @@ class DiscordBot:
         # SQL variables
         self.connection = sqlite3.connect("../extra_files/serverDatabase.db")
         self.cursor = self.connection.cursor()
+
+        # Load world map into array from CSV
+        with open("../extra_files/WorldMap.csv") as csv_to_map:
+            reader = csv.reader(csv_to_map, delimiter=',')
+            self.world_map= list(reader)
+
+        for row in self.world_map: print(row)
 
         # Start listening to chat
         self.bot = commands.Bot(command_prefix='!')
@@ -78,6 +86,12 @@ class DiscordBot:
         with self.file_lock:
             self.create_user_info_table()
             await self.message.channel.send('', file=File('../extra_files/user_info.jpg', filename='user_info.jpg'))
+
+    def create_encounter(self):
+        self.cursor.execute(
+            f"""INSERT INTO BattleInfo (UID, pHP, pSTAM, pATK, pDEF, pSPD, pEqpdItem, eHP, eSTAM, eATK, eDEF, eSPD, rndCounter)
+                VALUES ('{p1Stats[0]}', '{p2Stats[0]}', {p1Stats[1]}, {p2Stats[1]}, 1, 1,{p1Stats[2]}, {p2Stats[2]}, {p1Stats[3]}, {p2Stats[3]},'None','None',1,'{battleGround}');""")
+        self.connection.commit()
 
     def create_user_info_table(self):
         """

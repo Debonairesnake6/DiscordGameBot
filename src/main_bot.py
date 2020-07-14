@@ -88,6 +88,12 @@ class DiscordBot:
     # Travel Function to allow map traversal.
     async def travel(self):
 
+        # Compendium for what messages to display depending on where you are on the map.
+        location_legend = {
+            '0': 'You find yourself on clear land.',
+            'H' : 'You find yourself home! Home sweet home!'
+        }
+
         # Gather the location info and format it into local variables.
         self.cursor.execute(f"""SELECT Location FROM UserInfo WHERE UID={self.message.author.id}""")
         unformatted_location = self.cursor.fetchone()
@@ -104,9 +110,12 @@ class DiscordBot:
         elif self.first_argument == 'west':
             self.newLocation = [self.currentLocation[0], (self.currentLocation[1] + 1)]
 
-        # Verify that the movement is within the bounds of the map.
+        # Verify that the movement is within the bounds of the map, and not into a body of water.
         if (self.newLocation[0] > len(self.world_map)) or (self.newLocation[0] < 0) or (self.newLocation[1] > len(self.world_map[0])) or (self.newLocation[1] < 0):
             await self.message.channel.send('Invalid movement!')
+            return
+        elif self.world_map[self.newLocation[0]][self.newLocation[1]] == 'W':
+            await self.message.channel.send('Cannot travel into water!')
             return
 
         # Format new location info to publish to SQL database.
@@ -116,7 +125,61 @@ class DiscordBot:
         self.cursor.execute(f"""UPDATE UserInfo SET Location = '{toPublish}' WHERE UID = {self.message.author.id}""")
         self.connection.commit()
 
-        await self.message.channel.send(f'Your location contains: {self.world_map[self.newLocation[0]][self.newLocation[1]]}')
+        overview = ''
+
+        # Create sliding overview map. This doesnt really work great, dunno why.
+        try:
+            if self.world_map[self.newLocation[0]-1][self.newLocation[1]-1] in location_legend:
+                overview += self.world_map[self.newLocation[0]-1][self.newLocation[1]-1]
+        except IndexError:
+            overview += '_'
+        try:
+            if self.world_map[self.newLocation[0]-1][self.newLocation[1]] in location_legend:
+                overview += self.world_map[self.newLocation[0]-1][self.newLocation[1]]
+        except IndexError:
+            overview += '_'
+        try:
+            if self.world_map[self.newLocation[0]-1][self.newLocation[1]+1] in location_legend:
+                overview += self.world_map[self.newLocation[0]-1][self.newLocation[1]+1]
+        except IndexError:
+            overview += '_'
+
+        overview += '\n'
+
+        try:
+            if self.world_map[self.newLocation[0]][self.newLocation[1]-1] in location_legend:
+                overview += self.world_map[self.newLocation[0]][self.newLocation[1]-1]
+        except IndexError:
+            overview += '_'
+
+        overview += "`" + self.world_map[self.newLocation[0]][self.newLocation[1]] + "`"
+
+        try:
+            if self.world_map[self.newLocation[0]][self.newLocation[1]+1] in location_legend:
+                overview += self.world_map[self.newLocation[0]][self.newLocation[1]+1]
+        except IndexError:
+            overview += '_'
+
+        overview += '\n'
+
+        try:
+            if self.world_map[self.newLocation[0]+1][self.newLocation[1]-1] in location_legend:
+                overview += self.world_map[self.newLocation[0]+1][self.newLocation[1]-1]
+        except IndexError:
+            overview += '_'
+        try:
+            if self.world_map[self.newLocation[0]+1][self.newLocation[1]] in location_legend:
+                overview += self.world_map[self.newLocation[0]+1][self.newLocation[1]]
+        except IndexError:
+            overview += '_'
+        try:
+            if self.world_map[self.newLocation[0]+1][self.newLocation[1]+1] in location_legend:
+                overview += self.world_map[self.newLocation[0]+1][self.newLocation[1]+1]
+        except IndexError:
+            overview += '_'
+
+        await self.message.channel.send(f'{overview}')
+        await self.message.channel.send(f'{location_legend[str(self.world_map[self.newLocation[0]][self.newLocation[1]])]}')
 
         return
 

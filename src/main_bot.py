@@ -1,5 +1,4 @@
 import os
-import json
 import urllib
 import time
 import sys
@@ -9,7 +8,6 @@ import csv
 from discord import File
 from discord import Activity
 from discord import ActivityType
-from discord.errors import HTTPException
 from discord.ext import commands
 from dotenv import load_dotenv
 from src import text_to_image
@@ -30,6 +28,7 @@ class DiscordBot:
         self.display_name = None
         self.message = None
         self.file_lock = Lock()
+        self.arguments = None
 
         # Game variables
         self.user_info = {}
@@ -41,7 +40,7 @@ class DiscordBot:
         # Load world map into array from CSV
         with open("../extra_files/WorldMap.csv") as csv_to_map:
             reader = csv.reader(csv_to_map, delimiter=',')
-            self.world_map= list(reader)
+            self.world_map = list(reader)
 
         # Start listening to chat
         self.bot = commands.Bot(command_prefix='!')
@@ -60,6 +59,9 @@ class DiscordBot:
         await self.message.channel.send(f'Unknown command')
 
     async def register_me(self):
+        """
+        Register a new user in the database
+        """
 
         self.cursor.execute(f"""SELECT UID FROM UserInfo WHERE UID={self.message.author.id}  ;""")
 
@@ -69,7 +71,7 @@ class DiscordBot:
         else:
             self.cursor.execute(
                 f"""INSERT INTO UserInfo (UID, Name, isBusy, Money, LVL, EXP, HP, STAM, ATK, DEF, SPD, EqpdItem, Location)
-                                   VALUES ('{self.message.author.id}', '{self.message.author.name}', 0, 0, 1, 0, 100, 10, 10, 10, 10, 10, 'None', 'Home');""")
+                                   VALUES ('{self.message.author.id}', '{self.message.author.name}', 0, 0, 1, 0, 100, 10, 10, 10, 10, 'None', 'Home');""")
             self.connection.commit()
             await self.message.channel.send(f'You\'ve been registered with name: {self.message.author.name} ')
 
@@ -101,13 +103,13 @@ class DiscordBot:
         for i in range(0, len(self.currentLocation)): self.currentLocation[i] = int(self.currentLocation[i])
 
         # Adjust location by command.
-        if self.first_argument == 'north':
+        if self.arguments[0] == 'north':
             self.newLocation = [(self.currentLocation[0] - 1), self.currentLocation[1]]
-        elif self.first_argument == 'south':
+        elif self.arguments[0] == 'south':
             self.newLocation = [(self.currentLocation[0] + 1), self.currentLocation[1]]
-        elif self.first_argument == 'east':
+        elif self.arguments[0] == 'east':
             self.newLocation = [self.currentLocation[0], (self.currentLocation[1] - 1)]
-        elif self.first_argument == 'west':
+        elif self.arguments[0] == 'west':
             self.newLocation = [self.currentLocation[0], (self.currentLocation[1] + 1)]
 
         # Verify that the movement is within the bounds of the map, and not into a body of water.
@@ -197,7 +199,7 @@ class DiscordBot:
         text_to_image.CreateImage(titles=[title for title in self.user_info.keys() if title not in ignored_columns],
                                   rows=[[str(value) for title, value in self.user_info.items() if title not in ignored_columns]],
                                   file_name='../extra_files/user_info.jpg',
-                                  column_width=4)
+                                  column_width=3)
 
     def get_user_info(self):
         """
@@ -219,6 +221,9 @@ class DiscordBot:
         """
         await user.send(message)
 
+    async def my_new_method(self):
+        await self.message.channel.send('')
+
     def start_bot(self):
         """
         Start the bot
@@ -226,7 +231,8 @@ class DiscordBot:
         valid_commands = {
             'registerMe': self.register_me,
             'start_encounter': self.start_encounter,
-            'travel' : self.travel
+            'travel' : self.travel,
+
         }
 
         @self.bot.event
@@ -242,7 +248,7 @@ class DiscordBot:
                 self.user = message.author.name
                 self.display_name = message.author.display_name
                 self.message = message
-                self.first_argument = message.content.split()[1]
+                self.arguments = message.content.split()[1:]
                 await valid_commands[message.content.split()[0][1:]]()
 
         @self.bot.event
@@ -267,9 +273,8 @@ if __name__ == '__main__':
         try:
 
             # ToDo list:
-            #  -
-            #  -
-            #  -
+            #  -    Create inventory system
+            #  -    Single game window
             #  -
             #  -
             #  -

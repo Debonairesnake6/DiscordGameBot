@@ -3,6 +3,7 @@ This file will create an image from the input as a table
 """
 
 import prettytable
+
 from PIL import Image, ImageDraw, ImageFont
 
 
@@ -33,6 +34,7 @@ class CreateImage:
         self.column_width = column_width
         self.columns_processed = 0
         self.table_string = None
+        self.title_rows = None
 
         # Setup and add rows to the table
         self.table = prettytable.PrettyTable()
@@ -64,15 +66,113 @@ class CreateImage:
         """
         Convert to multiple tables to have more verticality
         """
-        for width in range((len(self.titles) / self.column_width).__round__()):
+        self.title_rows = (len(self.titles) / self.column_width).__round__()
+        joined_tables = self.split_and_join_tables()
+        needed_width = self.get_correct_spacing()
+        joined_tables = self.set_correct_spacing(joined_tables, needed_width)
+        self.table_string = self.correct_borders(joined_tables)
+
+    @staticmethod
+    def correct_borders(joined_tables: str) -> str:
+        """
+        Fix the borders in the table
+
+        :param joined_tables: String of tables joined together
+        :return: The string of tables with fixed borders
+        """
+        original_table = ''
+        first_row = joined_tables.split('\n')[0]
+        for row in joined_tables.split('\n'):
+            if ' ' not in row and row != first_row:
+                original_table += first_row
+            elif len(row) != len(first_row):
+                row += '|'
+                while len(row) < len(first_row):
+                    row = f'{row[:-1]} {row[-1]}'
+                original_table += row
+            else:
+                original_table += row
+            original_table += '\n'
+        original_table = original_table.strip()
+        return original_table
+
+    def get_correct_spacing(self) -> list:
+        """
+        Fix the spacing for different title or value widths
+
+        :return: List of spacing needed for each column
+        """
+        needed_width = []
+        for row in range(self.column_width):
+            largest_title = max([len(title) for title in self.titles[row::self.column_width]])
+            largest_value = max([len(amount) for amount in [value
+                                                            for total_row, _ in enumerate(self.rows)
+                                                            if total_row is not None
+                                                            for value in self.rows[total_row][row::self.column_width]]])
+            needed_width.append(max(largest_title, largest_value) + 2)
+        return needed_width
+
+    def set_correct_spacing(self, joined_tables: list, needed_width: list) -> str:
+        """
+        Set the correct amount of spacing for each column
+
+        :param joined_tables: List of the split tables
+        :param needed_width: Width needed for each column to be spaced out
+        :return: Fixed tables string
+        """
+        for table_cnt, table in enumerate(joined_tables):
+            for row in table.split('\n'):
+                if ' ' not in row:
+                    table = self.fix_spacing_in_row(table, row, needed_width, '+', '-')
+                else:
+                    table = self.fix_spacing_in_row(table, row, needed_width, '|', ' ')
+            joined_tables[table_cnt] = table
+        joined_tables.append(joined_tables[-1].split('\n')[0])
+        joined_tables = '\n'.join(joined_tables)
+        return joined_tables
+
+    @staticmethod
+    def fix_spacing_in_row(table: str, row: str, needed_width: list, delimiter: str, addition: str) -> str:
+        """
+        Fix the spacing in the given row
+
+        :param table: The string of the current table
+        :param row: The string of the current row
+        :param needed_width: Needed width for each column
+        :param delimiter: What delimiter to use
+        :param addition: What to add to the row
+        :return: Fixed table string
+        """
+        for cnt, column in enumerate(row.split(delimiter)[1:-1]):
+            side = 'right'
+            while len(column) < needed_width[cnt]:
+                indexes = [pos for pos, char in enumerate(row) if char == delimiter]
+                if side == 'left':
+                    table = table.replace(row, f'{row[:indexes[cnt] + 1]}{addition}{row[indexes[cnt] + 1:]}')
+                    side = 'right'
+                    row = f'{row[:indexes[cnt] + 1]}{addition}{row[indexes[cnt] + 1:]}'
+                else:
+                    table = table.replace(row, f'{row[:indexes[cnt + 1]]}{addition}{row[indexes[cnt + 1]:]}')
+                    side = 'left'
+                    row = f'{row[:indexes[cnt + 1]]}{addition}{row[indexes[cnt + 1]:]}'
+                column = f'{column}{addition}'
+        return table
+
+    def split_and_join_tables(self) -> list:
+        """
+        Split the tables based on self.column_width and join them below each other
+
+        :return: List of the split tables
+        """
+        joined_tables = []
+        for width in range(self.title_rows):
             table = prettytable.PrettyTable()
             table.field_names = self.titles[self.columns_processed:self.columns_processed + self.column_width]
             [table.add_row(row[self.columns_processed:self.columns_processed + self.column_width]) for row in self.rows]
-            print(table.get_string())
+            remove_border = "\n".join(table.get_string().split('\n')[:-1])
+            joined_tables.append(remove_border)
             self.columns_processed += self.column_width
-            # Todo continue to fix this section
-
-        print()
+        return joined_tables
 
     def turn_into_image(self):
         """
@@ -259,8 +359,8 @@ class TableToImage:
 if __name__ == '__main__':
 
     import shelve
-    tmp = dict(shelve.open('../extra_files/my_api')['text_to_image'])
+    tmp = dict(shelve.open('../extra_files/shelves/text_to_image'))['user_info']
     new = CreateImage(tmp['titles'], tmp['rows'], tmp['file_name'], tmp['colour'], tmp['convert_columns'],
-                      tmp['title_colours'])
+                      tmp['title_colours'], tmp['column_width'])
     new.save_image()
     print()

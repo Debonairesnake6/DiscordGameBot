@@ -4,6 +4,7 @@ import time
 import sys
 import sqlite3
 import csv
+import random
 
 from discord import File
 from discord import Activity
@@ -12,6 +13,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from src import text_to_image
 from threading import Lock
+from PIL import Image
 
 # Load environment variables
 load_dotenv()
@@ -79,7 +81,7 @@ class DiscordBot:
 
     async def start_encounter(self):
         """
-        Start an random encounter
+        Start a random encounter
         """
         await self.message.channel.send(f'An encounter has started!')
         self.get_user_info()
@@ -93,7 +95,14 @@ class DiscordBot:
         # Compendium for what messages to display depending on where you are on the map.
         location_legend = {
             '0': 'You find yourself on clear land.',
-            'H' : 'You find yourself home! Home sweet home!'
+            'H': 'You find yourself home! Home sweet home!',
+            'W': 'WATER'
+        }
+
+        tile_image_legend = {
+            '0': 'clearLand',
+            'H': 'home',
+            'W': 'water'
         }
 
         # Gather the location info and format it into local variables.
@@ -108,12 +117,12 @@ class DiscordBot:
         elif self.arguments[0] == 'south':
             self.newLocation = [(self.currentLocation[0] + 1), self.currentLocation[1]]
         elif self.arguments[0] == 'east':
-            self.newLocation = [self.currentLocation[0], (self.currentLocation[1] - 1)]
-        elif self.arguments[0] == 'west':
             self.newLocation = [self.currentLocation[0], (self.currentLocation[1] + 1)]
+        elif self.arguments[0] == 'west':
+            self.newLocation = [self.currentLocation[0], (self.currentLocation[1] - 1)]
 
         # Verify that the movement is within the bounds of the map, and not into a body of water.
-        if (self.newLocation[0] > len(self.world_map)) or (self.newLocation[0] < 0) or (self.newLocation[1] > len(self.world_map[0])) or (self.newLocation[1] < 0):
+        if self.newLocation[0] not in range(0,len(self.world_map)) or self.newLocation[1] not in range(0,len(self.world_map[0])):
             await self.message.channel.send('Invalid movement!')
             return
         elif self.world_map[self.newLocation[0]][self.newLocation[1]] == 'W':
@@ -129,67 +138,57 @@ class DiscordBot:
 
         overview = ''
 
-        # Create sliding overview map. This doesnt really work great, dunno why.
-        try:
-            if self.world_map[self.newLocation[0]-1][self.newLocation[1]-1] in location_legend:
-                overview += self.world_map[self.newLocation[0]-1][self.newLocation[1]-1]
-        except IndexError:
-            overview += '_'
-        try:
-            if self.world_map[self.newLocation[0]-1][self.newLocation[1]] in location_legend:
-                overview += self.world_map[self.newLocation[0]-1][self.newLocation[1]]
-        except IndexError:
-            overview += '_'
-        try:
-            if self.world_map[self.newLocation[0]-1][self.newLocation[1]+1] in location_legend:
-                overview += self.world_map[self.newLocation[0]-1][self.newLocation[1]+1]
-        except IndexError:
-            overview += '_'
+        # Create overview map.
 
-        overview += '\n'
+        map_image = Image.new('RGBA', (150, 150))
 
-        try:
-            if self.world_map[self.newLocation[0]][self.newLocation[1]-1] in location_legend:
-                overview += self.world_map[self.newLocation[0]][self.newLocation[1]-1]
-        except IndexError:
-            overview += '_'
+        for x in range(-1,2):
+            for y in range(-1,2):
 
-        overview += "`" + self.world_map[self.newLocation[0]][self.newLocation[1]] + "`"
+                xOffset = 50 + (y*50)
+                yOffset = 50 + (x*50)
 
-        try:
-            if self.world_map[self.newLocation[0]][self.newLocation[1]+1] in location_legend:
-                overview += self.world_map[self.newLocation[0]][self.newLocation[1]+1]
-        except IndexError:
-            overview += '_'
+                if (self.newLocation[0] + x) in range(0,len(self.world_map[0])) and (self.newLocation[1] + y) in range(0,len(self.world_map[0])):
+                    # Paste tile player is on.
+                    to_paste = Image.open(f'../extra_files/tileImages/{tile_image_legend[self.world_map[self.newLocation[0] + x][self.newLocation[1] + y]]}.png')
+                    map_image.paste(to_paste,(xOffset,yOffset))
 
-        overview += '\n'
+                    if x == 0 and y == 0:
+                        # Paste player sprite.
+                        map_sprite = to_paste = Image.open(f'../extra_files/tileImages/{tile_image_legend[self.world_map[self.newLocation[0] + x][self.newLocation[1] + y]]}.png').convert("RGBA")
+                        player_sprite = Image.open('../extra_files/tileImages/player.png').convert("RGBA")
 
-        try:
-            if self.world_map[self.newLocation[0]+1][self.newLocation[1]-1] in location_legend:
-                overview += self.world_map[self.newLocation[0]+1][self.newLocation[1]-1]
-        except IndexError:
-            overview += '_'
-        try:
-            if self.world_map[self.newLocation[0]+1][self.newLocation[1]] in location_legend:
-                overview += self.world_map[self.newLocation[0]+1][self.newLocation[1]]
-        except IndexError:
-            overview += '_'
-        try:
-            if self.world_map[self.newLocation[0]+1][self.newLocation[1]+1] in location_legend:
-                overview += self.world_map[self.newLocation[0]+1][self.newLocation[1]+1]
-        except IndexError:
-            overview += '_'
+                        player_on_tile = Image.alpha_composite(map_sprite,player_sprite)
 
-        await self.message.channel.send(f'{overview}')
+                        map_image.paste(player_on_tile, (xOffset, yOffset))
+                else:
+                    to_paste = Image.open('../extra_files/tileImages/border.png')
+                    map_image.paste(to_paste, (xOffset, yOffset))
+
+        map_image.save('overview_map.png')
+
+        await self.message.channel.send('', file=File('overview_map.png', filename='overview_map.png'))
         await self.message.channel.send(f'{location_legend[str(self.world_map[self.newLocation[0]][self.newLocation[1]])]}')
+
+        await self.check_for_encounter()
 
         return
 
-    def create_encounter(self):
-        self.cursor.execute(
-            f"""INSERT INTO BattleInfo (UID, pHP, pSTAM, pATK, pDEF, pSPD, pEqpdItem, eHP, eSTAM, eATK, eDEF, eSPD, rndCounter)
-                VALUES ('{p1Stats[0]}', '{p2Stats[0]}', {p1Stats[1]}, {p2Stats[1]}, 1, 1,{p1Stats[2]}, {p2Stats[2]}, {p1Stats[3]}, {p2Stats[3]},'None','None',1,'{battleGround}');""")
-        self.connection.commit()
+    async def check_for_encounter(self):
+
+        # Lists the likelihoods of a random encounter happening on that tile.
+        encounter_likelihood = {
+            '0': 50,
+            'H': 0,
+            'W': 0
+        }
+
+        encounter_chance = random.randint(0,100)
+
+        if encounter_chance <= encounter_likelihood[str(self.world_map[self.newLocation[0]][self.newLocation[1]])]:
+            await self.message.channel.send('Encounter occurred!')
+
+        return
 
     def create_user_info_table(self):
         """
@@ -221,9 +220,6 @@ class DiscordBot:
         """
         await user.send(message)
 
-    async def my_new_method(self):
-        await self.message.channel.send('')
-
     def start_bot(self):
         """
         Start the bot
@@ -231,8 +227,7 @@ class DiscordBot:
         valid_commands = {
             'registerMe': self.register_me,
             'start_encounter': self.start_encounter,
-            'travel' : self.travel,
-
+            'travel' : self.travel
         }
 
         @self.bot.event

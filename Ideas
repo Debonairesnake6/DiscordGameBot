@@ -22,6 +22,9 @@ Battle Table :
 Monster Table :
     Name, HP, STAM, ATK, DEF, SPD, ACTION1, ACTION2, ACTION3, ACTION4, ACTION5
 
+Encounter Table:
+    UID*, EncounterID, EncounterName, EncounterInfo
+
 Spell Table:
     UID*, KnownSpell1, KnownSpell2, etc.
 
@@ -32,7 +35,9 @@ Encounters ---------------------------------------------------------------------
 
     1 - Fight - Enter combat with a randomized monster adjusted to your level. If you win, you get EXP and loot.
 
-    2 - Strange Traveler -
+    2 - Find Item - Find a random small item/money.
+
+    3 - Strange Traveler -
         You are approached by a cloaked traveler who asks you for x (randomized value) money.
             Options:
                 - Give the traveler the gold.
@@ -48,7 +53,7 @@ Encounters ---------------------------------------------------------------------
                         - Continue to refuse.
                             > The traveler becomes agitated and begins a fight with you.
 
-    3 -  Strange Crate -
+    4 -  Strange Crate -
         As you travel, you come across a (small/medium/large), unmarked crate.
             Options:
                 - Ignore the crate.
@@ -58,7 +63,7 @@ Encounters ---------------------------------------------------------------------
                     > The crate is booby-trapped and explodes, causing you damage.
                     > The crate contained a creature, and they fight you.
 
-    4 - Wounded Traveler -
+    5 - Wounded Traveler -
         As you travel, you come across a wounded traveler, laying on the ground. They are covered in blood and their clothes
             are tattered.
             Options:
@@ -77,7 +82,7 @@ Encounters ---------------------------------------------------------------------
                                 > They die and you may loot their body.
                     > It's a trap and the traveler turns on you, attacking you with a surprise attack to start the round.
 
-    5 - Patrolling Official
+    6 - Patrolling Official
         You are approached by an official of a nearby city. They state they are looking for those smuggling contraband,
             and ask to look through your wares.
         Options:

@@ -5,15 +5,19 @@ import sys
 import sqlite3
 import csv
 import random
+import boto3
+import datetime
 
 from discord import File
 from discord import Activity
 from discord import ActivityType
+from discord import Embed
 from discord.ext import commands
 from dotenv import load_dotenv
 from src import text_to_image
 from threading import Lock
 from PIL import Image
+from botocore.exceptions import NoCredentialsError
 
 # Load environment variables
 load_dotenv()
@@ -31,9 +35,12 @@ class DiscordBot:
         self.message = None
         self.file_lock = Lock()
         self.arguments = None
+        self.reaction_payload = None
 
         # Game variables
         self.user_info = {}
+        self.previous_messages = {}
+        self.image_url = 'https://discordgamebotimages.s3.us-east-2.amazonaws.com/'
 
         # SQL variables
         self.connection = sqlite3.connect("../extra_files/serverDatabase.db")
@@ -87,7 +94,11 @@ class DiscordBot:
         self.get_user_info()
         with self.file_lock:
             self.create_user_info_table()
-            await self.message.channel.send('', file=File('../extra_files/user_info.jpg', filename='user_info.jpg'))
+            my_embed = Embed()
+            my_embed.set_image(url=f'{self.image_url}{self.user}_user_info.jpg')
+            self.previous_messages[self.user] = await self.message.channel.send(embed=my_embed)
+            await self.add_reactions(self.previous_messages[self.user],
+                                     ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'])
 
     # Travel Function to allow map traversal.
     async def travel(self):
@@ -174,6 +185,16 @@ class DiscordBot:
 
         return
 
+    async def add_reactions(self, message: object, reactions: list):
+        """
+        Add reactions to the given message
+
+        :param message: Message to add the reactions to
+        :param reactions: List of reactions to add
+        """
+        for reaction in reactions:
+            await message.add_reaction(reaction)
+
     async def check_for_encounter(self):
 
         # Lists the likelihoods of a random encounter happening on that tile.
@@ -190,15 +211,37 @@ class DiscordBot:
 
         return
 
-    def create_user_info_table(self):
+    def create_user_info_table(self, width: int = False):
         """
         Create the pretty table version of the user's info
+
+        :param width: The size of the column width if specified
         """
+        if not width:
+            width = 3
         ignored_columns = ['UID', 'Name', 'isBusy']
         text_to_image.CreateImage(titles=[title for title in self.user_info.keys() if title not in ignored_columns],
                                   rows=[[str(value) for title, value in self.user_info.items() if title not in ignored_columns]],
-                                  file_name='../extra_files/user_info.jpg',
-                                  column_width=3)
+                                  file_name=f'../extra_files/{self.user}_user_info.jpg',
+                                  column_width=width)
+        self.upload_to_aws()
+
+    def upload_to_aws(self):
+        """
+        Upload the current game image to AWS
+        """
+        auth = boto3.client('s3', aws_access_key_id=os.environ['AWSAccessKeyId'],
+                            aws_secret_access_key=os.environ['AWSSecretKey'])
+        try:
+            auth.upload_file(f'../extra_files/{self.user}_user_info.jpg',
+                             'discordgamebotimages',
+                             f'{self.user}_user_info.jpg',
+                             ExtraArgs={'GrantRead': 'uri=http://acs.amazonaws.com/groups/global/AllUsers'})
+            return True
+        except FileNotFoundError:
+            return False
+        except NoCredentialsError:
+            return False
 
     def get_user_info(self):
         """
@@ -209,6 +252,40 @@ class DiscordBot:
         results = [[stat[0], values[cnt]] for cnt, stat in enumerate(self.cursor.description)]
         for stat in results:
             self.user_info[stat[0]] = stat[1]
+
+    async def process_reaction_event(self):
+        """
+        Do something based on the reaction a player used
+        """
+        my_bot_id = 731973634519728168
+        if self.reaction_payload.user_id != my_bot_id:
+            await self.change_image(self.reaction_payload.emoji.name)
+            self.previous_messages[self.user] = await self.message.channel.fetch_message(self.previous_messages[self.user].id)
+            await self.previous_messages[self.user].remove_reaction(self.reaction_payload.emoji.name,
+                                                                    self.reaction_payload.member)
+
+    async def change_image(self, value: str):
+        """
+        Change the image from the previous message based on the reaction used
+
+        :param value: Reaction used
+        """
+        columns = {
+            '1️⃣': 1,
+            '2️⃣': 2,
+            '3️⃣': 3,
+            '4️⃣': 4,
+            '5️⃣': 5,
+            '6️⃣': 6,
+            '7️⃣': 7,
+            '8️⃣': 8,
+            '9️⃣': 9
+        }
+        self.create_user_info_table(columns[value])
+        my_embed = Embed()
+        timestamp = int(datetime.datetime.now().timestamp())
+        my_embed.set_image(url=f'{self.image_url}{self.user}_user_info.jpg?{timestamp}')
+        await self.previous_messages[self.user].edit(embed=my_embed)
 
     @staticmethod
     async def message_user(user: object, message: str):
@@ -226,8 +303,8 @@ class DiscordBot:
         """
         valid_commands = {
             'registerMe': self.register_me,
-            'start_encounter': self.start_encounter,
-            'travel' : self.travel
+            'test': self.start_encounter,
+            'travel': self.travel
         }
 
         @self.bot.event
@@ -245,6 +322,16 @@ class DiscordBot:
                 self.message = message
                 self.arguments = message.content.split()[1:]
                 await valid_commands[message.content.split()[0][1:]]()
+
+        @self.bot.event
+        async def on_raw_reaction_add(reaction_payload: object):
+            """
+            Checks if a reaction is added to the message
+
+            :param reaction_payload: Payload information about the reaction
+            """
+            self.reaction_payload = reaction_payload
+            await self.process_reaction_event()
 
         @self.bot.event
         async def on_ready():

@@ -36,11 +36,15 @@ class DiscordBot:
         self.file_lock = Lock()
         self.arguments = None
         self.reaction_payload = None
+        self.embed = Embed()
 
         # Game variables
         self.user_info = {}
         self.previous_messages = {}
         self.image_url = 'https://discordgamebotimages.s3.us-east-2.amazonaws.com/'
+        self.location_description = None
+        self.encounter_occurred = False
+        self.direction = None
 
         # SQL variables
         self.connection = sqlite3.connect("../extra_files/serverDatabase.db")
@@ -84,8 +88,6 @@ class DiscordBot:
             self.connection.commit()
             await self.message.channel.send(f'You\'ve been registered with name: {self.message.author.name} ')
 
-        return
-
     async def start_encounter(self):
         """
         Start a random encounter
@@ -98,10 +100,11 @@ class DiscordBot:
             my_embed.set_image(url=f'{self.image_url}{self.user}_user_info.jpg')
             self.previous_messages[self.user] = await self.message.channel.send(embed=my_embed)
             await self.add_reactions(self.previous_messages[self.user],
-                                     ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'])
+                                     [1, 2, 3, 4, 5, 6, 7, 8, 9])
 
     # Travel Function to allow map traversal.
     async def travel(self):
+        new_location = False
 
         # Compendium for what messages to display depending on where you are on the map.
         location_legend = {
@@ -123,31 +126,32 @@ class DiscordBot:
         for i in range(0, len(self.currentLocation)): self.currentLocation[i] = int(self.currentLocation[i])
 
         # Adjust location by command.
-        if self.arguments[0] == 'north':
-            self.newLocation = [(self.currentLocation[0] - 1), self.currentLocation[1]]
-        elif self.arguments[0] == 'south':
-            self.newLocation = [(self.currentLocation[0] + 1), self.currentLocation[1]]
-        elif self.arguments[0] == 'east':
-            self.newLocation = [self.currentLocation[0], (self.currentLocation[1] + 1)]
-        elif self.arguments[0] == 'west':
-            self.newLocation = [self.currentLocation[0], (self.currentLocation[1] - 1)]
+        if self.direction is not None:
+            if self.direction == 'north':
+                self.newLocation = [(self.currentLocation[0] - 1), self.currentLocation[1]]
+            elif self.direction == 'south':
+                self.newLocation = [(self.currentLocation[0] + 1), self.currentLocation[1]]
+            elif self.direction == 'east':
+                self.newLocation = [self.currentLocation[0], (self.currentLocation[1] + 1)]
+            elif self.direction == 'west':
+                self.newLocation = [self.currentLocation[0], (self.currentLocation[1] - 1)]
 
-        # Verify that the movement is within the bounds of the map, and not into a body of water.
-        if self.newLocation[0] not in range(0,len(self.world_map)) or self.newLocation[1] not in range(0,len(self.world_map[0])):
-            await self.message.channel.send('Invalid movement!')
-            return
-        elif self.world_map[self.newLocation[0]][self.newLocation[1]] == 'W':
-            await self.message.channel.send('Cannot travel into water!')
-            return
+            # Verify that the movement is within the bounds of the map, and not into a body of water.
+            if self.newLocation[0] not in range(0,len(self.world_map)) or self.newLocation[1] not in range(0,len(self.world_map[0])):
+                await self.message.channel.send('Invalid movement!')
+            elif self.world_map[self.newLocation[0]][self.newLocation[1]] == 'W':
+                await self.message.channel.send('Cannot travel into water!')
 
-        # Format new location info to publish to SQL database.
-        toPublish = str(self.newLocation[0]) + "-" + str(self.newLocation[1])
+            # Format new location info to publish to SQL database.
+            toPublish = str(self.newLocation[0]) + "-" + str(self.newLocation[1])
 
-        # Commit new location to database.
-        self.cursor.execute(f"""UPDATE UserInfo SET Location = '{toPublish}' WHERE UID = {self.message.author.id}""")
-        self.connection.commit()
+            # Commit new location to database.
+            self.cursor.execute(f"""UPDATE UserInfo SET Location = '{toPublish}' WHERE UID = {self.message.author.id}""")
+            self.connection.commit()
+            new_location = True
 
-        overview = ''
+        if not new_location:
+            self.newLocation = self.currentLocation
 
         # Create overview map.
 
@@ -176,14 +180,11 @@ class DiscordBot:
                     to_paste = Image.open('../extra_files/tileImages/border.png')
                     map_image.paste(to_paste, (xOffset, yOffset))
 
-        map_image.save('overview_map.png')
+        map_image.save(f'../extra_files/{self.user}_overview_map.png')
+        self.upload_to_aws('overview_map.png')
 
-        await self.message.channel.send('', file=File('overview_map.png', filename='overview_map.png'))
-        await self.message.channel.send(f'{location_legend[str(self.world_map[self.newLocation[0]][self.newLocation[1]])]}')
-
-        await self.check_for_encounter()
-
-        return
+        self.location_description = location_legend[str(self.world_map[self.newLocation[0]][self.newLocation[1]])]
+        self.check_for_encounter()
 
     async def add_reactions(self, message: object, reactions: list):
         """
@@ -192,10 +193,26 @@ class DiscordBot:
         :param message: Message to add the reactions to
         :param reactions: List of reactions to add
         """
+        reactions_dict = {
+            1: '1️⃣',
+            2: '2️⃣',
+            3: '3️⃣',
+            4: '4️⃣',
+            5: '5️⃣',
+            6: '6️⃣',
+            7: '7️⃣',
+            8: '8️⃣',
+            9: '9️⃣',
+            'north': '⬆️',
+            'south': '⬇️',
+            'east': '⬅️',
+            'west': '➡️',
+            'reset': '♻️'
+        }
         for reaction in reactions:
-            await message.add_reaction(reaction)
+            await message.add_reaction(reactions_dict[reaction])
 
-    async def check_for_encounter(self):
+    def check_for_encounter(self):
 
         # Lists the likelihoods of a random encounter happening on that tile.
         encounter_likelihood = {
@@ -204,12 +221,10 @@ class DiscordBot:
             'W': 0
         }
 
-        encounter_chance = random.randint(0,100)
+        encounter_chance = random.randint(0, 100)
 
         if encounter_chance <= encounter_likelihood[str(self.world_map[self.newLocation[0]][self.newLocation[1]])]:
-            await self.message.channel.send('Encounter occurred!')
-
-        return
+            self.encounter_occurred = True
 
     def create_user_info_table(self, width: int = False):
         """
@@ -224,24 +239,25 @@ class DiscordBot:
                                   rows=[[str(value) for title, value in self.user_info.items() if title not in ignored_columns]],
                                   file_name=f'../extra_files/{self.user}_user_info.jpg',
                                   column_width=width)
-        self.upload_to_aws()
+        self.upload_to_aws('user_info.jpg')
 
-    def upload_to_aws(self):
+    def upload_to_aws(self, filename: str):
         """
         Upload the current game image to AWS
+
+        :param filename: Name of the file to load and save as on AWS. e.g. user_info.jpg
         """
         auth = boto3.client('s3', aws_access_key_id=os.environ['AWSAccessKeyId'],
                             aws_secret_access_key=os.environ['AWSSecretKey'])
         try:
-            auth.upload_file(f'../extra_files/{self.user}_user_info.jpg',
+            auth.upload_file(f'../extra_files/{self.user}_{filename}',
                              'discordgamebotimages',
-                             f'{self.user}_user_info.jpg',
+                             f'{self.user}_{filename}',
                              ExtraArgs={'GrantRead': 'uri=http://acs.amazonaws.com/groups/global/AllUsers'})
-            return True
         except FileNotFoundError:
-            return False
+            pass
         except NoCredentialsError:
-            return False
+            pass
 
     def get_user_info(self):
         """
@@ -253,39 +269,76 @@ class DiscordBot:
         for stat in results:
             self.user_info[stat[0]] = stat[1]
 
-    async def process_reaction_event(self):
+    async def get_and_remove_reaction(self):
         """
-        Do something based on the reaction a player used
+        Get the reaction and remove it
         """
         my_bot_id = 731973634519728168
         if self.reaction_payload.user_id != my_bot_id:
-            await self.change_image(self.reaction_payload.emoji.name)
+            await self.handle_reaction_result()
             self.previous_messages[self.user] = await self.message.channel.fetch_message(self.previous_messages[self.user].id)
             await self.previous_messages[self.user].remove_reaction(self.reaction_payload.emoji.name,
                                                                     self.reaction_payload.member)
 
-    async def change_image(self, value: str):
+    async def change_image(self, file_name: str, fields: dict = False):
         """
         Change the image from the previous message based on the reaction used
 
-        :param value: Reaction used
+        :param file_name: Name of the image without the username. e.g. _user_info.jpg
+        :param fields: Fields to add to the message. e.g. {'field1': 'name1', 'field2': 'name2'}
         """
-        columns = {
-            '1️⃣': 1,
-            '2️⃣': 2,
-            '3️⃣': 3,
-            '4️⃣': 4,
-            '5️⃣': 5,
-            '6️⃣': 6,
-            '7️⃣': 7,
-            '8️⃣': 8,
-            '9️⃣': 9
-        }
-        self.create_user_info_table(columns[value])
-        my_embed = Embed()
         timestamp = int(datetime.datetime.now().timestamp())
-        my_embed.set_image(url=f'{self.image_url}{self.user}_user_info.jpg?{timestamp}')
-        await self.previous_messages[self.user].edit(embed=my_embed)
+        self.embed.clear_fields()
+        self.embed.set_image(url=f'{self.image_url}{self.user}_{file_name}?{timestamp}')
+        if fields:
+            for field_name, field_value in fields.items():
+                self.embed.add_field(name=field_name, value=field_value)
+        await self.previous_messages[self.user].edit(embed=self.embed)
+
+    async def handle_reaction_result(self):
+        """
+        Handle what clicking the reaction actual does in the game
+        """
+        directions = {
+            '⬆️': 'north',
+            '⬇️': 'south',
+            '⬅️': 'west',
+            '➡️': 'east'
+        }
+        fields = {
+            'Info': self.location_description
+        }
+        options = {
+            '♻️': 'reset'
+        }
+        reaction = self.reaction_payload.emoji.name
+        timestamp = int(datetime.datetime.now().timestamp())
+        if reaction in directions:
+            self.direction = directions[self.reaction_payload.emoji.name]
+            await self.travel()
+            if self.encounter_occurred:
+                fields['Bring out the lube'] = 'An encounter has occurred!'
+            await self.change_image('overview_map.png', fields)
+        elif reaction in options:
+            if options[reaction] == 'reset':
+                self.embed.set_image(url=f'{self.image_url}{self.user}_overview_map.png?{timestamp}')
+                self.previous_messages[self.user] = await self.message.channel.send('', embed=self.embed)
+                await self.add_reactions(self.previous_messages[self.user], ['east', 'north', 'south', 'west', 'reset'])
+
+    async def first_travel(self):
+        """
+        First load the travel before you can click on the reactions
+        """
+        await self.travel()
+        timestamp = int(datetime.datetime.now().timestamp())
+        self.embed.set_image(url=f'{self.image_url}{self.user}_overview_map.png?{timestamp}')
+        print(f'Image path: {self.image_url}{self.user}_overview_map.png')
+        self.embed.add_field(name='Info', value=self.location_description)
+        if self.encounter_occurred:
+            self.embed.add_field(name='Bring out the lube', value='An encounter has occurred!')
+        message_sent = await self.message.channel.send('', embed=self.embed)
+        self.previous_messages[self.user] = message_sent
+        await self.add_reactions(message_sent, ['east', 'north', 'south', 'west', 'reset'])
 
     @staticmethod
     async def message_user(user: object, message: str):
@@ -304,7 +357,7 @@ class DiscordBot:
         valid_commands = {
             'registerMe': self.register_me,
             'test': self.start_encounter,
-            'travel': self.travel
+            'travel': self.first_travel
         }
 
         @self.bot.event
@@ -331,7 +384,7 @@ class DiscordBot:
             :param reaction_payload: Payload information about the reaction
             """
             self.reaction_payload = reaction_payload
-            await self.process_reaction_event()
+            await self.get_and_remove_reaction()
 
         @self.bot.event
         async def on_ready():

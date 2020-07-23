@@ -32,9 +32,6 @@ class DiscordBot:
         self.file_lock = Lock()
         self.arguments = None
 
-        # Game variables
-        self.user_info = {}
-
         # SQL variables
         self.connection = sqlite3.connect("../extra_files/serverDatabase.db")
         self.cursor = self.connection.cursor()
@@ -227,7 +224,7 @@ class DiscordBot:
         valid_commands = {
             'registerMe': self.register_me,
             'start_encounter': self.start_encounter,
-            'travel' : self.travel
+            'travel' : self.travel,
         }
 
         @self.bot.event

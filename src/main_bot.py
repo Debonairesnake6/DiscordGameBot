@@ -8,6 +8,7 @@ import random
 import boto3
 import datetime
 from src import enemies
+from src import AWS
 import numpy as np
 
 from discord import File
@@ -39,6 +40,9 @@ class DiscordBot:
         self.arguments = None
         self.reaction_payload = None
         self.embed = Embed()
+
+        # Initializers
+        self.AWS = AWS.AWSHandler() # Create an AWS handler object.
 
         # Game variables
         self.user_info = {}
@@ -166,13 +170,13 @@ class DiscordBot:
         map_image = Image.new('RGBA', (150, 160))
 
         # Draw skybox
-        time_from_morning = random.randint(0, 50)
+        time_from_morning = random.randint(0, 100)
 
         for x in range(-1, 2):
             xOffset = 50 + (50 * x)
             img1 = ImageDraw.Draw(map_image)
 
-            img1.rectangle([(xOffset, 0), (xOffset + 50, 40)], fill=(125-time_from_morning, 125-time_from_morning, 250-time_from_morning))
+            img1.rectangle([(xOffset, 0), (xOffset + 50, 40)], fill=(170-time_from_morning, 190-time_from_morning, 235-time_from_morning))
 
         # Draw rest of map overview
         for y in range(-1, 2):
@@ -215,7 +219,7 @@ class DiscordBot:
         self.location_description = location_legend[str(self.world_map[self.newLocation[0]][self.newLocation[1]])]
         self.check_for_encounter()
 
-        self.upload_to_aws('overview_map.png')
+        self.AWS.upload_image(self.user, 'overview_map.png')
 
     async def add_reactions(self, message: object, reactions: list):
         """
@@ -271,25 +275,7 @@ class DiscordBot:
                                          title not in ignored_columns]],
                                   file_name=f'../extra_files/{self.user}_user_info.jpg',
                                   column_width=width)
-        self.upload_to_aws('user_info.jpg')
-
-    def upload_to_aws(self, filename: str):
-        """
-        Upload the current game image to AWS
-
-        :param filename: Name of the file to load and save as on AWS. e.g. user_info.jpg
-        """
-        auth = boto3.client('s3', aws_access_key_id=os.environ['AWSAccessKeyId'],
-                            aws_secret_access_key=os.environ['AWSSecretKey'])
-        try:
-            auth.upload_file(f'../extra_files/{self.user}_{filename}',
-                             'discordgamebotimages',
-                             f'{self.user}_{filename}',
-                             ExtraArgs={'GrantRead': 'uri=http://acs.amazonaws.com/groups/global/AllUsers'})
-        except FileNotFoundError:
-            pass
-        except NoCredentialsError:
-            pass
+        self.AWS.upload_image(self.user, 'user_info.jpg')
 
     def get_user_info(self):
         """
@@ -305,7 +291,7 @@ class DiscordBot:
         """
         Get the reaction and remove it
         """
-        my_bot_id = [731973634519728168,731973183275532419]
+        my_bot_id = [731973634519728168, 731973183275532419] #First one is Ryan's, second is Sebastian's.
         if self.reaction_payload.user_id not in my_bot_id:
             await self.handle_reaction_result()
             self.previous_messages[self.user] = await self.message.channel.fetch_message(

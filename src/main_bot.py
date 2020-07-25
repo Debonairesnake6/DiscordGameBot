@@ -306,7 +306,7 @@ class DiscordBot:
             '➡️': 'east'
         }
         fields = {
-            'Info': self.location_description
+            
         }
         options = {
             '♻️': 'reset'
@@ -316,6 +316,7 @@ class DiscordBot:
         if reaction in directions:
             self.direction = directions[self.reaction_payload.emoji.name]
             await self.travel()
+            fields['Info'] = self.location_description
             if self.encounter_occurred:
                 fields['Bring out the lube'] = 'An encounter has occurred!'
             await self.change_image('overview_map.png', fields)
@@ -356,7 +357,7 @@ class DiscordBot:
         """
         valid_commands = {
             'registerMe': self.register_me,
-            'test': self.start_encounter,
+            'start_encounter': self.start_encounter,
             'travel': self.first_travel
         }
 

@@ -1,11 +1,8 @@
 class Enemies:
 
-    def __init__(self, message):
+    def __init__(self):
         self.hi = "hi"
-        self.message = message
 
-        self.printMe()
+    async def printMe(self, message):
 
-    async def printMe(self):
-        print(self.hi)
-        await self.message.channel.send('hello')
+        await message.message.channel.send('hello')

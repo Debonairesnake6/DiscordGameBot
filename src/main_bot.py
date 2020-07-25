@@ -7,6 +7,9 @@ import csv
 import random
 import boto3
 import datetime
+from src import enemies
+from src import AWS
+import numpy as np
 
 from discord import File
 from discord import Activity
@@ -16,7 +19,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 from src import text_to_image
 from threading import Lock
-from PIL import Image
+from PIL import Image, ImageDraw
 from botocore.exceptions import NoCredentialsError
 
 # Load environment variables
@@ -37,6 +40,9 @@ class DiscordBot:
         self.arguments = None
         self.reaction_payload = None
         self.embed = Embed()
+
+        # Initializers
+        self.AWS = AWS.AWSHandler() # Create an AWS handler object.
 
         # Game variables
         self.user_info = {}
@@ -137,16 +143,22 @@ class DiscordBot:
                 self.newLocation = [self.currentLocation[0], (self.currentLocation[1] - 1)]
 
             # Verify that the movement is within the bounds of the map, and not into a body of water.
-            if self.newLocation[0] not in range(0,len(self.world_map)) or self.newLocation[1] not in range(0,len(self.world_map[0])):
+            if self.newLocation[1] not in range(0, len(self.world_map)) or self.newLocation[0] not in range(0, len(self.world_map[0])):
+
                 await self.message.channel.send('Invalid movement!')
+                return
+
             elif self.world_map[self.newLocation[0]][self.newLocation[1]] == 'W':
                 await self.message.channel.send('Cannot travel into water!')
+                return
+
 
             # Format new location info to publish to SQL database.
             toPublish = str(self.newLocation[0]) + "-" + str(self.newLocation[1])
 
             # Commit new location to database.
-            self.cursor.execute(f"""UPDATE UserInfo SET Location = '{toPublish}' WHERE UID = {self.message.author.id}""")
+            self.cursor.execute(
+                f"""UPDATE UserInfo SET Location = '{toPublish}' WHERE UID = {self.message.author.id}""")
             self.connection.commit()
             new_location = True
 
@@ -155,36 +167,59 @@ class DiscordBot:
 
         # Create overview map.
 
-        map_image = Image.new('RGBA', (150, 150))
+        map_image = Image.new('RGBA', (150, 160))
 
-        for x in range(-1,2):
-            for y in range(-1,2):
+        # Draw skybox
+        time_from_morning = random.randint(0, 100)
 
-                xOffset = 50 + (y*50)
-                yOffset = 50 + (x*50)
+        for x in range(-1, 2):
+            xOffset = 50 + (50 * x)
+            img1 = ImageDraw.Draw(map_image)
 
-                if (self.newLocation[0] + x) in range(0,len(self.world_map[0])) and (self.newLocation[1] + y) in range(0,len(self.world_map[0])):
-                    # Paste tile player is on.
-                    to_paste = Image.open(f'../extra_files/tileImages/{tile_image_legend[self.world_map[self.newLocation[0] + x][self.newLocation[1] + y]]}.png')
-                    map_image.paste(to_paste,(xOffset,yOffset))
+            img1.rectangle([(xOffset, 0), (xOffset + 50, 40)], fill=(170-time_from_morning, 190-time_from_morning, 235-time_from_morning))
 
+        # Draw rest of map overview
+        for y in range(-1, 2):
+            yOffset = ((y+1)*40)
+            tile_y = self.newLocation[0] + y
+
+            for x in range(-1, 2):
+                xOffset = 50 + (x * 50)
+                tile_x = self.newLocation[1] + x
+
+                if tile_x in range(0, len(self.world_map[1])) and tile_y in range(0, len(self.world_map[0])):
+
+                    to_paste = Image.open(f'../extra_files/tileImages/{tile_image_legend[self.world_map[tile_y][tile_x]]}.png')
+                    background = map_image.crop([xOffset, yOffset, xOffset+50, yOffset+80])
+                    final_paste = Image.alpha_composite(background, to_paste)
+                    map_image.paste(final_paste, ([xOffset, yOffset, xOffset+50, yOffset+80]))
+
+                    # If on player space.
                     if x == 0 and y == 0:
                         # Paste player sprite.
-                        map_sprite = to_paste = Image.open(f'../extra_files/tileImages/{tile_image_legend[self.world_map[self.newLocation[0] + x][self.newLocation[1] + y]]}.png').convert("RGBA")
+                        map_sprite = to_paste = Image.open(f'../extra_files/tileImages/{tile_image_legend[self.world_map[tile_y][tile_x]]}.png').convert( "RGBA")
                         player_sprite = Image.open('../extra_files/tileImages/player.png').convert("RGBA")
 
-                        player_on_tile = Image.alpha_composite(map_sprite,player_sprite)
+                        background = map_image.crop([50, 40, 100, 120])
+
+                        map_sprite = Image.alpha_composite(background, map_sprite)
+
+                        player_on_tile = Image.alpha_composite(map_sprite, player_sprite)
 
                         map_image.paste(player_on_tile, (xOffset, yOffset))
                 else:
                     to_paste = Image.open('../extra_files/tileImages/border.png')
-                    map_image.paste(to_paste, (xOffset, yOffset))
+                    background = map_image.crop([xOffset, yOffset, xOffset + 50, yOffset + 80])
+                    final_paste = Image.alpha_composite(background, to_paste)
+                    map_image.paste(final_paste, (xOffset, yOffset))
+
 
         map_image.save(f'../extra_files/{self.user}_overview_map.png')
-        self.upload_to_aws('overview_map.png')
 
         self.location_description = location_legend[str(self.world_map[self.newLocation[0]][self.newLocation[1]])]
         self.check_for_encounter()
+
+        self.AWS.upload_image(self.user, 'overview_map.png')
 
     async def add_reactions(self, message: object, reactions: list):
         """
@@ -223,7 +258,7 @@ class DiscordBot:
 
         encounter_chance = random.randint(0, 100)
 
-        if encounter_chance <= encounter_likelihood[str(self.world_map[self.newLocation[0]][self.newLocation[1]])]:
+        if encounter_chance <= encounter_likelihood[str(self.world_map[self.newLocation[1]][self.newLocation[0]])]:
             self.encounter_occurred = True
 
     def create_user_info_table(self, width: int = False):
@@ -236,28 +271,11 @@ class DiscordBot:
             width = 3
         ignored_columns = ['UID', 'Name', 'isBusy']
         text_to_image.CreateImage(titles=[title for title in self.user_info.keys() if title not in ignored_columns],
-                                  rows=[[str(value) for title, value in self.user_info.items() if title not in ignored_columns]],
+                                  rows=[[str(value) for title, value in self.user_info.items() if
+                                         title not in ignored_columns]],
                                   file_name=f'../extra_files/{self.user}_user_info.jpg',
                                   column_width=width)
-        self.upload_to_aws('user_info.jpg')
-
-    def upload_to_aws(self, filename: str):
-        """
-        Upload the current game image to AWS
-
-        :param filename: Name of the file to load and save as on AWS. e.g. user_info.jpg
-        """
-        auth = boto3.client('s3', aws_access_key_id=os.environ['AWSAccessKeyId'],
-                            aws_secret_access_key=os.environ['AWSSecretKey'])
-        try:
-            auth.upload_file(f'../extra_files/{self.user}_{filename}',
-                             'discordgamebotimages',
-                             f'{self.user}_{filename}',
-                             ExtraArgs={'GrantRead': 'uri=http://acs.amazonaws.com/groups/global/AllUsers'})
-        except FileNotFoundError:
-            pass
-        except NoCredentialsError:
-            pass
+        self.AWS.upload_image(self.user, 'user_info.jpg')
 
     def get_user_info(self):
         """
@@ -273,10 +291,11 @@ class DiscordBot:
         """
         Get the reaction and remove it
         """
-        my_bot_id = 731973634519728168
-        if self.reaction_payload.user_id != my_bot_id:
+        my_bot_id = [731973634519728168, 731973183275532419] #First one is Ryan's, second is Sebastian's.
+        if self.reaction_payload.user_id not in my_bot_id:
             await self.handle_reaction_result()
-            self.previous_messages[self.user] = await self.message.channel.fetch_message(self.previous_messages[self.user].id)
+            self.previous_messages[self.user] = await self.message.channel.fetch_message(
+                self.previous_messages[self.user].id)
             await self.previous_messages[self.user].remove_reaction(self.reaction_payload.emoji.name,
                                                                     self.reaction_payload.member)
 
@@ -306,7 +325,7 @@ class DiscordBot:
             '➡️': 'east'
         }
         fields = {
-            
+
         }
         options = {
             '♻️': 'reset'
@@ -341,6 +360,11 @@ class DiscordBot:
         self.previous_messages[self.user] = message_sent
         await self.add_reactions(message_sent, ['east', 'north', 'south', 'west', 'reset'])
 
+    async def sayHi(self):
+        self.enemy = enemies.Enemies()
+
+        await self.enemy.printMe(self)
+
     @staticmethod
     async def message_user(user: object, message: str):
         """
@@ -358,7 +382,8 @@ class DiscordBot:
         valid_commands = {
             'registerMe': self.register_me,
             'start_encounter': self.start_encounter,
-            'travel': self.first_travel
+            'travel': self.first_travel,
+            'sayHi': self.sayHi
         }
 
         @self.bot.event

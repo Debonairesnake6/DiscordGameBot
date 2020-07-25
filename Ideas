@@ -1,5 +1,4 @@
 Combat ---------------------------------------------------------------------------------------------------------------
-    > At round start, each player gains 1 STAM.
     Basic Combat Functions:
         Attack - 1 STAM COST - Inflict (ATK) damage on enemy.
         Defend - 0 STAM COST - Decrease any incoming damage by (DEF)
@@ -17,7 +16,7 @@ User Info Table :
     UID*, Name, isBusy, Money, LVL, EXP, HP, ATK, DEF, SPD, EqpdItem, Location
 
 Battle Table :
-    UID*, pHP, pSTAM, pATK, pDEF, pSPD, pEqpdItem, eHP, eSTAM, eATK, eDEF, eSPD
+    UID*, pHP, pSTAM, pATK, pDEF, pSPD, pEqpdItem, eType, eHP, eSTAM, eATK, eDEF, eSPD
 
 Monster Table :
     Name, HP, STAM, ATK, DEF, SPD, ACTION1, ACTION2, ACTION3, ACTION4, ACTION5

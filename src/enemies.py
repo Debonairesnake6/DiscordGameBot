@@ -4,5 +4,4 @@ class Enemies:
         self.hi = "hi"
 
     async def printMe(self, message):
-
         await message.message.channel.send('hello')

@@ -9,15 +9,21 @@ class BaseItem:
     Sword, Shield, Bow
     """
 
-    def __init__(self, name: str, modifiers: dict = False):
+    def __init__(self, real_name: str, display_name: str = False, modifiers: dict = False):
         """
         This will include any basic stats about an item. The current base items are:
         Sword, Shield, Bow
 
-        :param name: Name of the item
+        :param real_name: Name of the original item
+        :param display_name: Display name of the item
         :param modifiers: Any modifiers to add to the base stats of an item
         """
-        self.name = name
+        self.real_name = real_name
+        if not display_name:
+            self.display_name = real_name
+        else:
+            self.display_name = display_name
+
         self.stats = {
             'attack': 0,
             'defense': 0,
@@ -27,11 +33,18 @@ class BaseItem:
             'heal': 0
         }
         self.modifiers = modifiers
+        self.image_path = None
 
+        self.run_all_functions()
+
+    def run_all_functions(self):
+        """
+        run all of the functions required to create an item
+        """
         self.create_basic_item()
-
-        if modifiers is not False:
+        if self.modifiers is not False:
             self.add_modifiers()
+        self.load_image_path()
 
     def create_basic_item(self):
         """
@@ -42,7 +55,7 @@ class BaseItem:
             'shield': {'attack': 1, 'defense': 3, 'attack_speed': 1, 'attack_range': 1},
             'bow': {'attack': 4, 'attack_speed': 2, 'attack_range': 10}
         }
-        for stat, value in base_items[self.name].items():
+        for stat, value in base_items[self.real_name].items():
             self.stats[stat] = value
 
     def add_modifiers(self):
@@ -50,10 +63,20 @@ class BaseItem:
         Add any additional modifiers to the base stats of the weapon
         """
         for stat, value in self.modifiers.items():
-            self.stats[stat] += value
+            self.stats[stat] = self.stats.get(stat, 0) + value
+
+    def load_image_path(self):
+        """
+        Load the path for the image of the item
+        """
+        image_paths = {
+            'sword': '../extra_files/icons/sword.png',
+            'bow': '../extra_files/icons/bow.png'
+        }
+        self.image_path = image_paths[self.real_name]
 
 
 if __name__ == '__main__':
     sword = BaseItem('sword')
-    bow = BaseItem('bow', {'attack': 1})
+    bow = BaseItem('bow', 'Awesome Bow of Shooting', {'attack': 1})
     print()

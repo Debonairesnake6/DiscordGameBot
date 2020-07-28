@@ -18,6 +18,8 @@ from discord import Embed
 from discord.ext import commands
 from dotenv import load_dotenv
 from src import text_to_image
+from src import inventory_manager
+from src import item_manager
 from threading import Lock
 from PIL import Image, ImageDraw
 from botocore.exceptions import NoCredentialsError
@@ -51,6 +53,10 @@ class DiscordBot:
         self.location_description = None
         self.encounter_occurred = False
         self.direction = None
+        # for the inventory to be moved later into user_info
+        self.highlight = 9
+        self.columns = 4
+        self.rows = 4
 
         # SQL variables
         self.connection = sqlite3.connect("../extra_files/serverDatabase.db")
@@ -221,7 +227,8 @@ class DiscordBot:
 
         self.AWS.upload_image(self.user, 'overview_map.png')
 
-    async def add_reactions(self, message: object, reactions: list):
+    @staticmethod
+    async def add_reactions(message: object, reactions: list):
         """
         Add reactions to the given message
 
@@ -242,7 +249,11 @@ class DiscordBot:
             'south': '⬇️',
             'east': '⬅️',
             'west': '➡️',
-            'reset': '♻️'
+            'reset': '♻️',
+            'up': '🔼',
+            'down': '🔽',
+            'left': '◀️',
+            'right': '▶️'
         }
         for reaction in reactions:
             await message.add_reaction(reactions_dict[reaction])
@@ -291,7 +302,7 @@ class DiscordBot:
         """
         Get the reaction and remove it
         """
-        my_bot_id = [731973634519728168, 731973183275532419] #First one is Ryan's, second is Sebastian's.
+        my_bot_id = [731973634519728168, 731973183275532419]  # First one is Ryan's, second is Sebastian's.
         if self.reaction_payload.user_id not in my_bot_id:
             await self.handle_reaction_result()
             self.previous_messages[self.user] = await self.message.channel.fetch_message(
@@ -318,24 +329,27 @@ class DiscordBot:
         """
         Handle what clicking the reaction actual does in the game
         """
-        directions = {
+        direction_travel = {
             '⬆️': 'north',
             '⬇️': 'south',
             '⬅️': 'west',
             '➡️': 'east'
         }
-        fields = {
-
-        }
         options = {
             '♻️': 'reset'
         }
+        direction_inventory = {
+            '🔼': 'up',
+            '🔽': 'down',
+            '◀️': 'left',
+            '▶️': 'right'
+        }
         reaction = self.reaction_payload.emoji.name
         timestamp = int(datetime.datetime.now().timestamp())
-        if reaction in directions:
-            self.direction = directions[self.reaction_payload.emoji.name]
+        if reaction in direction_travel:
+            self.direction = direction_travel[self.reaction_payload.emoji.name]
             await self.travel()
-            fields['Info'] = self.location_description
+            fields = {'Info': self.location_description}
             if self.encounter_occurred:
                 fields['Bring out the lube'] = 'An encounter has occurred!'
             await self.change_image('overview_map.png', fields)
@@ -344,6 +358,10 @@ class DiscordBot:
                 self.embed.set_image(url=f'{self.image_url}{self.user}_overview_map.png?{timestamp}')
                 self.previous_messages[self.user] = await self.message.channel.send('', embed=self.embed)
                 await self.add_reactions(self.previous_messages[self.user], ['east', 'north', 'south', 'west', 'reset'])
+        elif reaction in direction_inventory:
+            self.move_inventory_cursor(direction_inventory[reaction])
+            self.create_inventory_embed()
+            await self.previous_messages[self.user].edit(embed=self.embed)
 
     async def first_travel(self):
         """
@@ -365,6 +383,74 @@ class DiscordBot:
 
         await self.enemy.printMe(self)
 
+    async def display_inventory(self):
+        """
+        Display the player's current inventory is discord
+        """
+        self.create_inventory_embed()
+        self.previous_messages[self.user] = await self.message.channel.send(embed=self.embed)
+        await self.add_reactions(self.previous_messages[self.user], ['left', 'up', 'down', 'right'])
+
+    def create_inventory_embed(self):
+        """
+        Create an embed for the current user's inventory
+        """
+        timestamp = int(datetime.datetime.now().timestamp())
+        self.create_inventory_image()
+        self.embed.clear_fields()
+        self.embed.set_image(url=f'{self.image_url}{self.user}_inventory.png?{timestamp}')
+
+        # todo for testing only
+        items = {
+            0: item_manager.BaseItem('bow', 'Awesome Bow of Shooting', {'attack': 1}),
+            3: item_manager.BaseItem('sword', 'Pointy Stick', {'attack': 2}),
+            9: item_manager.BaseItem('sword', 'Big Knife', {'friends': -2}),
+            7: item_manager.BaseItem('bow', 'Twig and String', {'attack_range': -5}),
+            14: item_manager.BaseItem('bow', 'Deluxe Master 3001', {'attack_speed': 6}),
+        }
+        if self.highlight in items:
+            self.embed.add_field(name='Name', value=items[self.highlight].display_name)
+            for stat, value in items[self.highlight].stats.items():
+                if value != 0:
+                    self.embed.add_field(name=stat.capitalize().replace('_', ' '), value=value, inline=True)
+
+    def create_inventory_image(self):
+        """
+        Create the image to display the user's inventory
+        """
+        # todo these values need to be dynamically grabbed and saved per player
+        inventory_manager.CreateInventoryImage(f'{self.user}_inventory.png',
+                                               columns=self.columns,
+                                               rows=self.rows,
+                                               highlight=self.highlight,
+                                               items={
+                                                   0: item_manager.BaseItem('bow', 'Awesome Bow of Shooting', {'attack': 1}),
+                                                   3: item_manager.BaseItem('sword', 'Pointy Stick', {'attack': 2}),
+                                                   9: item_manager.BaseItem('sword', 'Big Knife', {'friends': -2}),
+                                                   7: item_manager.BaseItem('bow', 'Twig and String', {'attack_range': -5}),
+                                                   14: item_manager.BaseItem('bow', 'Deluxe Master 3001', {'attack_speed': 6}),
+                                               })
+        self.AWS.upload_image(self.user, 'inventory.png')
+
+    def move_inventory_cursor(self, direction: str):
+        """
+        Move the cursor on the inventory screen based on the reaction given
+        """
+        if direction == 'up':
+            self.highlight = (self.highlight - self.rows) % (self.rows * self.columns)
+        elif direction == 'down':
+            self.highlight = (self.highlight + self.rows) % (self.rows * self.columns)
+        elif direction == 'left':
+            if (self.highlight - 1) % self.columns == self.columns - 1:
+                self.highlight += self.columns - 1
+            else:
+                self.highlight -= 1
+        elif direction == 'right':
+            if (self.highlight + 1) % self.columns == self.columns - 1:
+                self.highlight -= self.columns - 1
+            else:
+                self.highlight += 1
+
     @staticmethod
     async def message_user(user: object, message: str):
         """
@@ -383,7 +469,8 @@ class DiscordBot:
             'registerMe': self.register_me,
             'start_encounter': self.start_encounter,
             'travel': self.first_travel,
-            'sayHi': self.sayHi
+            'sayHi': self.sayHi,
+            'test': self.display_inventory
         }
 
         @self.bot.event

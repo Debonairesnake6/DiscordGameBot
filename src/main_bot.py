@@ -5,13 +5,12 @@ import sys
 import sqlite3
 import csv
 import random
-import boto3
 import datetime
 from src import enemies
 from src import AWS
 import numpy as np
+import json
 
-from discord import File
 from discord import Activity
 from discord import ActivityType
 from discord import Embed
@@ -22,7 +21,6 @@ from src import inventory_manager
 from src import item_manager
 from threading import Lock
 from PIL import Image, ImageDraw
-from botocore.exceptions import NoCredentialsError
 
 # Load environment variables
 load_dotenv()
@@ -36,27 +34,25 @@ class DiscordBot:
     def __init__(self):
         # Bot variables
         self.user = None
+        self.user_id = None
         self.display_name = None
         self.message = None
         self.file_lock = Lock()
         self.arguments = None
         self.reaction_payload = None
+        self.message_type = None
         self.embed = Embed()
+        self.bot_ids = [731973634519728168, 731973183275532419]  # First one is Ryan's, second is Sebastian's.
 
         # Initializers
         self.AWS = AWS.AWSHandler() # Create an AWS handler object.
 
         # Game variables
         self.user_info = {}
-        self.previous_messages = {}
         self.image_url = 'https://discordgamebotimages.s3.us-east-2.amazonaws.com/'
         self.location_description = None
         self.encounter_occurred = False
         self.direction = None
-        # for the inventory to be moved later into user_info
-        self.highlight = 9
-        self.columns = 4
-        self.rows = 4
 
         # SQL variables
         self.connection = sqlite3.connect("../extra_files/serverDatabase.db")
@@ -88,6 +84,21 @@ class DiscordBot:
         Register a new user in the database
         """
 
+        self.cursor.execute(f'CREATE TABLE IF NOT EXISTS UserInfo('
+                            f'UID INTEGER PRIMARY KEY,'
+                            f'Name TEXT,'
+                            f'isBusy INTEGER,'
+                            f'Money,'
+                            f'LVL INTEGER,'
+                            f'EXP INTEGER,'
+                            f'HP INTEGER,'
+                            f'STAM INTEGER,'
+                            f'ATK INTEGER,'
+                            f'DEF INTEGER,'
+                            f'SPD INTEGER,'
+                            f'Location TEXT,'
+                            f'Inventory Text,'
+                            f'PreviousMessages Text)')
         self.cursor.execute(f"""SELECT UID FROM UserInfo WHERE UID={self.message.author.id}  ;""")
 
         if self.cursor.fetchone() is not None:
@@ -95,8 +106,8 @@ class DiscordBot:
             return
         else:
             self.cursor.execute(
-                f"""INSERT INTO UserInfo (UID, Name, isBusy, Money, LVL, EXP, HP, STAM, ATK, DEF, SPD, EqpdItem, Location)
-                                   VALUES ('{self.message.author.id}', '{self.message.author.name}', 0, 0, 1, 0, 100, 10, 10, 10, 10, 'None', 'Home');""")
+                f"""INSERT INTO UserInfo (UID, Name, isBusy, Money, LVL, EXP, HP, STAM, ATK, DEF, SPD, Location, Inventory, PreviousMessages)
+                                   VALUES ('{self.message.author.id}', '{self.message.author.name}', 0, 0, 1, 0, 100, 10, 10, 10, 10, 'Home', {dict()}, {None});""")
             self.connection.commit()
             await self.message.channel.send(f'You\'ve been registered with name: {self.message.author.name} ')
 
@@ -105,13 +116,12 @@ class DiscordBot:
         Start a random encounter
         """
         await self.message.channel.send(f'An encounter has started!')
-        self.get_user_info()
         with self.file_lock:
             self.create_user_info_table()
             my_embed = Embed()
             my_embed.set_image(url=f'{self.image_url}{self.user}_user_info.jpg')
-            self.previous_messages[self.user] = await self.message.channel.send(embed=my_embed)
-            await self.add_reactions(self.previous_messages[self.user],
+            self.user_info[self.user]['PreviousMessages']['Encounter'] = await self.message.channel.send(embed=my_embed)
+            await self.add_reactions(self.user_info[self.user]['PreviousMessages']['Encounter'],
                                      [1, 2, 3, 4, 5, 6, 7, 8, 9])
 
     # Travel Function to allow map traversal.
@@ -132,9 +142,7 @@ class DiscordBot:
         }
 
         # Gather the location info and format it into local variables.
-        self.cursor.execute(f"""SELECT Location FROM UserInfo WHERE UID={self.message.author.id}""")
-        unformatted_location = self.cursor.fetchone()
-        self.currentLocation = ''.join(unformatted_location).split("-")
+        self.currentLocation = ''.join(self.user_info[self.user]['Location']).split("-")
         for i in range(0, len(self.currentLocation)): self.currentLocation[i] = int(self.currentLocation[i])
 
         # Adjust location by command.
@@ -151,21 +159,14 @@ class DiscordBot:
             # Verify that the movement is within the bounds of the map, and not into a body of water.
             if self.newLocation[1] not in range(0, len(self.world_map)) or self.newLocation[0] not in range(0, len(self.world_map[0])):
 
-                await self.message.channel.send('Invalid movement!')
+                await self.user_info[self.user]['PreviousMessages']['Travel'].channel.send('Invalid movement!')
                 return
 
             elif self.world_map[self.newLocation[0]][self.newLocation[1]] == 'W':
-                await self.message.channel.send('Cannot travel into water!')
+                await self.user_info[self.user]['PreviousMessages']['Travel'].channel.send('Cannot travel into water!')
                 return
 
-
-            # Format new location info to publish to SQL database.
-            toPublish = str(self.newLocation[0]) + "-" + str(self.newLocation[1])
-
-            # Commit new location to database.
-            self.cursor.execute(
-                f"""UPDATE UserInfo SET Location = '{toPublish}' WHERE UID = {self.message.author.id}""")
-            self.connection.commit()
+            self.user_info[self.user]['Location'] = str(self.newLocation[0]) + "-" + str(self.newLocation[1])
             new_location = True
 
         if not new_location:
@@ -249,11 +250,7 @@ class DiscordBot:
             'south': '⬇️',
             'east': '⬅️',
             'west': '➡️',
-            'reset': '♻️',
-            'up': '🔼',
-            'down': '🔽',
-            'left': '◀️',
-            'right': '▶️'
+            'reset': '♻️'
         }
         for reaction in reactions:
             await message.add_reaction(reactions_dict[reaction])
@@ -281,34 +278,22 @@ class DiscordBot:
         if not width:
             width = 3
         ignored_columns = ['UID', 'Name', 'isBusy']
-        text_to_image.CreateImage(titles=[title for title in self.user_info.keys() if title not in ignored_columns],
-                                  rows=[[str(value) for title, value in self.user_info.items() if
+        text_to_image.CreateImage(titles=[title for title in self.user_info[self.user].keys() if title not in ignored_columns],
+                                  rows=[[str(value) for title, value in self.user_info[self.user].items() if
                                          title not in ignored_columns]],
                                   file_name=f'../extra_files/{self.user}_user_info.jpg',
                                   column_width=width)
         self.AWS.upload_image(self.user, 'user_info.jpg')
 
-    def get_user_info(self):
-        """
-        Query the user info from the database
-        """
-        self.cursor.execute(f'SELECT * FROM UserInfo WHERE UID={self.message.author.id}')
-        values = self.cursor.fetchone()
-        results = [[stat[0], values[cnt]] for cnt, stat in enumerate(self.cursor.description)]
-        for stat in results:
-            self.user_info[stat[0]] = stat[1]
-
     async def get_and_remove_reaction(self):
         """
         Get the reaction and remove it
         """
-        my_bot_id = [731973634519728168, 731973183275532419]  # First one is Ryan's, second is Sebastian's.
-        if self.reaction_payload.user_id not in my_bot_id:
+        # todo determine what type of message was reacted on and act accordingly
+        if self.reaction_payload.user_id:
             await self.handle_reaction_result()
-            self.previous_messages[self.user] = await self.message.channel.fetch_message(
-                self.previous_messages[self.user].id)
-            await self.previous_messages[self.user].remove_reaction(self.reaction_payload.emoji.name,
-                                                                    self.reaction_payload.member)
+            await self.user_info[self.user]['PreviousMessages'][self.message_type].remove_reaction(self.reaction_payload.emoji.name,
+                                                                                                   self.reaction_payload.member)
 
     async def change_image(self, file_name: str, fields: dict = False):
         """
@@ -323,13 +308,13 @@ class DiscordBot:
         if fields:
             for field_name, field_value in fields.items():
                 self.embed.add_field(name=field_name, value=field_value)
-        await self.previous_messages[self.user].edit(embed=self.embed)
+        await self.user_info[self.user]['PreviousMessages'][self.message_type].edit(embed=self.embed)
 
     async def handle_reaction_result(self):
         """
         Handle what clicking the reaction actual does in the game
         """
-        direction_travel = {
+        directions = {
             '⬆️': 'north',
             '⬇️': 'south',
             '⬅️': 'west',
@@ -338,30 +323,34 @@ class DiscordBot:
         options = {
             '♻️': 'reset'
         }
-        direction_inventory = {
-            '🔼': 'up',
-            '🔽': 'down',
-            '◀️': 'left',
-            '▶️': 'right'
-        }
+
+        # Determine the type of message reacted to
+        if self.reaction_payload.message_id == self.user_info[self.user]['PreviousMessages']['Inventory'].id:
+            self.message_type = 'Inventory'
+        elif self.reaction_payload.message_id == self.user_info[self.user]['PreviousMessages']['Travel'].id:
+            self.message_type = 'Travel'
+
         reaction = self.reaction_payload.emoji.name
         timestamp = int(datetime.datetime.now().timestamp())
-        if reaction in direction_travel:
-            self.direction = direction_travel[self.reaction_payload.emoji.name]
-            await self.travel()
-            fields = {'Info': self.location_description}
-            if self.encounter_occurred:
-                fields['Bring out the lube'] = 'An encounter has occurred!'
-            await self.change_image('overview_map.png', fields)
-        elif reaction in options:
+        if reaction in options:  # todo fix this with the new previous messages
             if options[reaction] == 'reset':
                 self.embed.set_image(url=f'{self.image_url}{self.user}_overview_map.png?{timestamp}')
-                self.previous_messages[self.user] = await self.message.channel.send('', embed=self.embed)
-                await self.add_reactions(self.previous_messages[self.user], ['east', 'north', 'south', 'west', 'reset'])
-        elif reaction in direction_inventory:
-            self.move_inventory_cursor(direction_inventory[reaction])
-            self.create_inventory_embed()
-            await self.previous_messages[self.user].edit(embed=self.embed)
+                self.user_info[self.user]['PreviousMessages'][self.message_type] = \
+                    await self.user_info[self.user]['PreviousMessages'][self.message_type].channel.send('', embed=self.embed)
+                await self.add_reactions(self.user_info[self.user]['PreviousMessages'][self.message_type],
+                                         ['east', 'north', 'south', 'west', 'reset'])
+        elif reaction in directions:
+            if self.message_type == 'Travel':
+                self.direction = directions[self.reaction_payload.emoji.name]
+                await self.travel()
+                fields = {'Info': self.location_description}
+                if self.encounter_occurred:
+                    fields['Bring out the lube'] = 'An encounter has occurred!'
+                await self.change_image('overview_map.png', fields)
+            elif self.message_type == 'Inventory':
+                self.move_inventory_cursor(directions[reaction])
+                self.create_inventory_embed()
+                await self.user_info[self.user]['PreviousMessages']['Inventory'].edit(embed=self.embed)
 
     async def first_travel(self):
         """
@@ -375,7 +364,7 @@ class DiscordBot:
         if self.encounter_occurred:
             self.embed.add_field(name='Bring out the lube', value='An encounter has occurred!')
         message_sent = await self.message.channel.send('', embed=self.embed)
-        self.previous_messages[self.user] = message_sent
+        self.user_info[self.user]['PreviousMessages']['Travel'] = message_sent
         await self.add_reactions(message_sent, ['east', 'north', 'south', 'west', 'reset'])
 
     async def sayHi(self):
@@ -388,8 +377,8 @@ class DiscordBot:
         Display the player's current inventory is discord
         """
         self.create_inventory_embed()
-        self.previous_messages[self.user] = await self.message.channel.send(embed=self.embed)
-        await self.add_reactions(self.previous_messages[self.user], ['left', 'up', 'down', 'right'])
+        self.user_info[self.user]['PreviousMessages']['Inventory'] = await self.message.channel.send(embed=self.embed)
+        await self.add_reactions(self.user_info[self.user]['PreviousMessages']['Inventory'], ['east', 'north', 'south', 'west'])
 
     def create_inventory_embed(self):
         """
@@ -400,56 +389,124 @@ class DiscordBot:
         self.embed.clear_fields()
         self.embed.set_image(url=f'{self.image_url}{self.user}_inventory.png?{timestamp}')
 
-        # todo for testing only
-        items = {
-            0: item_manager.BaseItem('bow', 'Awesome Bow of Shooting', {'attack': 1}),
-            3: item_manager.BaseItem('sword', 'Pointy Stick', {'attack': 2}),
-            9: item_manager.BaseItem('sword', 'Big Knife', {'friends': -2}),
-            7: item_manager.BaseItem('bow', 'Twig and String', {'attack_range': -5}),
-            14: item_manager.BaseItem('bow', 'Deluxe Master 3001', {'attack_speed': 6}),
-        }
-        if self.highlight in items:
-            self.embed.add_field(name='Name', value=items[self.highlight].display_name)
-            for stat, value in items[self.highlight].stats.items():
-                if value != 0:
-                    self.embed.add_field(name=stat.capitalize().replace('_', ' '), value=value, inline=True)
+        highlight = self.user_info[self.user]['Inventory']['highlight']
+        if highlight in self.user_info[self.user]['Inventory']:
+            self.embed.add_field(name='Name', value=self.user_info[self.user]['Inventory'][highlight].display_name)
+            self.embed.add_field(name='Stats', value='\n'.join([f'{stat.replace("_", " ").capitalize()}: {value}'
+                                                                for stat, value in self.user_info[self.user]['Inventory'][highlight].stats.items()
+                                                                if value != 0]))
 
     def create_inventory_image(self):
         """
         Create the image to display the user's inventory
         """
         # todo these values need to be dynamically grabbed and saved per player
+        if self.user_info[self.user]['Inventory'] == {}:
+            self.user_info[self.user]['Inventory'] = {
+                0: item_manager.BaseItem('bow', 'Awesome Bow of Shooting', {'attack': 1}),
+                3: item_manager.BaseItem('sword', 'Pointy Stick', {'attack': 2}),
+                9: item_manager.BaseItem('sword', 'Big Knife', {'friends': -2}),
+                7: item_manager.BaseItem('bow', 'Twig and String', {'attack_range': -5}),
+                14: item_manager.BaseItem('bow', 'Deluxe Master 3001', {'attack_speed': 6}),
+                'highlight': 10,
+                'columns': 4,
+                'rows': 4
+            }
+        # Just used to shorten calls
+        inventory = self.user_info[self.user]['Inventory']
         inventory_manager.CreateInventoryImage(f'{self.user}_inventory.png',
-                                               columns=self.columns,
-                                               rows=self.rows,
-                                               highlight=self.highlight,
-                                               items={
-                                                   0: item_manager.BaseItem('bow', 'Awesome Bow of Shooting', {'attack': 1}),
-                                                   3: item_manager.BaseItem('sword', 'Pointy Stick', {'attack': 2}),
-                                                   9: item_manager.BaseItem('sword', 'Big Knife', {'friends': -2}),
-                                                   7: item_manager.BaseItem('bow', 'Twig and String', {'attack_range': -5}),
-                                                   14: item_manager.BaseItem('bow', 'Deluxe Master 3001', {'attack_speed': 6}),
-                                               })
+                                               columns=inventory['columns'],
+                                               rows=inventory['rows'],
+                                               highlight=inventory['highlight'],
+                                               items=self.user_info[self.user]['Inventory'])
         self.AWS.upload_image(self.user, 'inventory.png')
 
     def move_inventory_cursor(self, direction: str):
         """
         Move the cursor on the inventory screen based on the reaction given
         """
-        if direction == 'up':
-            self.highlight = (self.highlight - self.rows) % (self.rows * self.columns)
-        elif direction == 'down':
-            self.highlight = (self.highlight + self.rows) % (self.rows * self.columns)
-        elif direction == 'left':
-            if (self.highlight - 1) % self.columns == self.columns - 1:
-                self.highlight += self.columns - 1
+        inventory = self.user_info[self.user]['Inventory']
+        if direction == 'north':
+            inventory['highlight'] = (inventory['highlight'] - inventory['rows']) % (inventory['rows'] * inventory['columns'])
+        elif direction == 'south':
+            inventory['highlight'] = (inventory['highlight'] + inventory['rows']) % (inventory['rows'] * inventory['columns'])
+        elif direction == 'west':
+            if (inventory['highlight'] - 1) % inventory['columns'] == inventory['columns'] - 1:
+                inventory['highlight'] += inventory['columns'] - 1
             else:
-                self.highlight -= 1
-        elif direction == 'right':
-            if (self.highlight + 1) % self.columns == self.columns - 1:
-                self.highlight -= self.columns - 1
+                inventory['highlight'] -= 1
+        elif direction == 'east':
+            if (inventory['highlight'] + 1) % inventory['columns'] == 0:
+                inventory['highlight'] -= inventory['columns'] - 1
             else:
-                self.highlight += 1
+                inventory['highlight'] += 1
+
+    async def load_player_info(self):
+        """
+        Load the player's information from the database if not in memory
+        """
+        if self.user not in self.user_info and self.user_id not in self.bot_ids:
+            self.user_info[self.user] = {}
+            self.cursor.execute(f'SELECT * FROM UserInfo WHERE UID={self.user_id}')
+            values = self.cursor.fetchone()
+
+            # Only for one time use to fix old table todo remove once run
+            if 'Inventory' not in [column_name[0] for column_name in self.cursor.description]:
+                self.update_user_info_table()
+                self.cursor.execute(f'SELECT * FROM UserInfo WHERE UID={self.user_id}')
+                values = self.cursor.fetchone()
+
+            results = [[stat[0], values[cnt]] for cnt, stat in enumerate(self.cursor.description)]
+            for stat in results:
+                if stat[0] == 'Inventory':
+                    self.user_info[self.user]['Inventory'] = {}
+                    for key, value in json.loads(stat[1]).items():
+                        if key.isdecimal():
+                            value = json.loads(value)
+                            self.user_info[self.user]['Inventory'][int(key)] = item_manager.BaseItem(value['real_name'], value['display_name'], value['modifiers'])
+                        else:
+                            self.user_info[self.user]['Inventory'][key] = value
+                elif stat[0] == 'PreviousMessages':
+                    self.user_info[self.user]['PreviousMessages'] = {}
+                    for key, value in json.loads(stat[1]).items():
+                        channel = self.bot.get_channel(value['channel_id'])
+                        self.user_info[self.user]['PreviousMessages'][key] = await channel.fetch_message(value['message_id'])
+                else:
+                    self.user_info[self.user][stat[0]] = stat[1]
+
+    def update_user_info_table(self):
+        """
+        Update the user info table to get rid or old and include new columns
+        """
+        self.cursor.execute('ALTER TABLE UserInfo ADD COLUMN Inventory JSON')
+        self.cursor.execute('ALTER TABLE UserInfo ADD COLUMN PreviousMessages JSON')
+        self.cursor.execute(f'UPDATE UserInfo SET Inventory = ?, PreviousMessages = ? WHERE UID = {self.user_id}',
+                            [json.dumps({}), json.dumps({})])
+        self.connection.commit()
+
+    def save_user_info_to_table(self):
+        """
+        Save the current user information to the database. This is automatically called at the end of execution
+        """
+        dictionaries = ['Inventory', 'PreviousMessages']
+        modified_dictionaries = [{}, {}]
+
+        # Convert the inventory to serializable objects
+        for item in self.user_info[self.user]['Inventory']:
+            if type(item) == int:
+                modified_dictionaries[0][item] = self.user_info[self.user]['Inventory'][item].json_object
+            else:
+                modified_dictionaries[0][item] = self.user_info[self.user]['Inventory'][item]
+
+        # Change the previous messages to their id's
+        for message in self.user_info[self.user]['PreviousMessages']:
+            modified_dictionaries[1][message] = {'channel_id': self.user_info[self.user]['PreviousMessages'][message].channel.id,
+                                                 'message_id': self.user_info[self.user]['PreviousMessages'][message].id}
+
+        self.cursor.execute(f'UPDATE UserInfo SET {" = ?, ".join([column for column in self.user_info[self.user]])} = ? WHERE UID = {self.user_id}',
+                            [self.user_info[self.user][column] for column in self.user_info[self.user] if column not in dictionaries] +
+                            [json.dumps(column) for column in modified_dictionaries])
+        self.connection.commit()
 
     @staticmethod
     async def message_user(user: object, message: str):
@@ -482,12 +539,16 @@ class DiscordBot:
             """
             if message.content != '' \
                     and message.content.split()[0][1:] in valid_commands \
-                    and message.content[0] == '!':
+                    and message.content[0] == '!'\
+                    and message.author.id not in self.bot_ids:
                 self.user = message.author.name
                 self.display_name = message.author.display_name
+                self.user_id = message.author.id
                 self.message = message
                 self.arguments = message.content.split()[1:]
+                await self.load_player_info()
                 await valid_commands[message.content.split()[0][1:]]()
+                self.save_user_info_to_table()
 
         @self.bot.event
         async def on_raw_reaction_add(reaction_payload: object):
@@ -496,8 +557,14 @@ class DiscordBot:
 
             :param reaction_payload: Payload information about the reaction
             """
-            self.reaction_payload = reaction_payload
-            await self.get_and_remove_reaction()
+            if reaction_payload.member.id not in self.bot_ids:
+                self.reaction_payload = reaction_payload
+                self.user = reaction_payload.member.name
+                self.display_name = reaction_payload.member.display_name
+                self.user_id = reaction_payload.member.id
+                await self.load_player_info()
+                await self.get_and_remove_reaction()
+                self.save_user_info_to_table()
 
         @self.bot.event
         async def on_ready():

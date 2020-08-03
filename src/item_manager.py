@@ -3,6 +3,9 @@ This will contain all of the information about all of the items for the game.
 """
 
 
+import json
+
+
 class BaseItem:
     """
     This will include any basic stats about an item. The current base items are:
@@ -34,6 +37,7 @@ class BaseItem:
         }
         self.modifiers = modifiers
         self.image_path = None
+        self.json_object = None
 
         self.run_all_functions()
 
@@ -45,6 +49,7 @@ class BaseItem:
         if self.modifiers is not False:
             self.add_modifiers()
         self.load_image_path()
+        self.to_json()
 
     def create_basic_item(self):
         """
@@ -74,6 +79,13 @@ class BaseItem:
             'bow': '../extra_files/icons/bow.png'
         }
         self.image_path = image_paths[self.real_name]
+
+    def to_json(self):
+        """
+        Return the object as a json serializable object
+        :return:
+        """
+        self.json_object = json.dumps(self, default=lambda o: o.__dict__)
 
 
 if __name__ == '__main__':

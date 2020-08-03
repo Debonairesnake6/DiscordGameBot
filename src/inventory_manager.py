@@ -91,13 +91,14 @@ class CreateInventoryImage:
         icon_height = self.item_locations[0][3] - self.item_locations[0][1] - 10
 
         for position, item_object in self.items.items():
-            item_icon = Image.open(item_object.image_path)
-            item_icon = item_icon.resize([icon_width, icon_height])
-            x_min = int(self.item_locations[position][0] + (self.border / 2))
-            y_min = int(self.item_locations[position][1] + (self.border / 2))
-            x_max = int(self.item_locations[position][2] - (self.border / 2))
-            y_max = int(self.item_locations[position][3] - (self.border / 2))
-            self.image.paste(item_icon, [x_min, y_min, x_max, y_max], item_icon)
+            if type(position) == int:
+                item_icon = Image.open(item_object.image_path)
+                item_icon = item_icon.resize([icon_width, icon_height])
+                x_min = int(self.item_locations[position][0] + (self.border / 2))
+                y_min = int(self.item_locations[position][1] + (self.border / 2))
+                x_max = int(self.item_locations[position][2] - (self.border / 2))
+                y_max = int(self.item_locations[position][3] - (self.border / 2))
+                self.image.paste(item_icon, [x_min, y_min, x_max, y_max], item_icon)
 
 
 if __name__ == '__main__':

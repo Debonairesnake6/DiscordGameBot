@@ -1,3 +1,7 @@
+"""
+Handles the interactions with the AWS bucket
+"""
+
 import os
 import boto3
 from botocore.exceptions import NoCredentialsError

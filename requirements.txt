@@ -15,7 +15,7 @@ prettytable==0.7.2
 python-dateutil==2.8.1
 python-dotenv==1.2.2
 s3transfer==0.3.3
-setuptools==78.1.1
+setuptools==83.0.0
 six==1.15.0
 urllib3==2.7.0
 websockets==9.1
